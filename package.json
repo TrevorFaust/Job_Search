@@ -9,7 +9,7 @@
     "dry": "cross-env DRY_RUN=1 node src/index.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",
