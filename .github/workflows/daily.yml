@@ -5,7 +5,8 @@ on:
     # 15:00 UTC = 8:00 AM Pacific (during daylight saving; 7:00 AM in winter).
     # GitHub crons are always UTC, so edit this line to change the send time.
     - cron: '0 15 * * *'
-  workflow_dispatch: {} # lets you trigger a run manually from the Actions tab
+  # workflow_dispatch lets you trigger a run manually from the Actions tab
+  workflow_dispatch:
 
 jobs:
   digest:
