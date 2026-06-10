@@ -1,0 +1,22 @@
+{
+  "name": "job-hunter",
+  "version": "1.0.0",
+  "description": "Daily job scraper + email digest",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dry": "cross-env DRY_RUN=1 node src/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.4",
+    "cross-env": "^7.0.3",
+    "dotenv": "^16.4.5",
+    "nodemailer": "^8.0.10",
+    "playwright": "^1.49.0",
+    "rss-parser": "^3.13.0"
+  }
+}
