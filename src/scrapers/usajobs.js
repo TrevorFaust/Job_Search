@@ -1,13 +1,8 @@
-import { fetchJson, truncate } from './utils.js';
+import { fetchJson, truncateDescription } from './utils.js';
 
 export const name = 'usajobs';
 
-/**
- * Official federal jobs API. Unlike the other sources we pass keywords to the
- * API directly since USAJobs has tens of thousands of postings.
- * Requires USAJOBS_API_KEY + USAJOBS_USER_AGENT (your email) in .env.
- */
-export async function scrape({ keywords }) {
+export async function scrape({ mode = 'daily' } = {}) {
   const apiKey = process.env.USAJOBS_API_KEY;
   const userAgent = process.env.USAJOBS_USER_AGENT;
   if (!apiKey || !userAgent) {
@@ -21,14 +16,27 @@ export async function scrape({ keywords }) {
     Host: 'data.usajobs.gov',
   };
 
+  const maxPages = mode === 'full' ? 20 : 5;
   const jobs = [];
-  for (const keyword of keywords) {
-    const data = await fetchJson(
-      `https://data.usajobs.gov/api/search?Keyword=${encodeURIComponent(keyword)}&ResultsPerPage=50&SortField=opendate&SortDirection=desc`,
-      { headers }
-    );
-    for (const result of data.SearchResult?.SearchResultItems ?? []) {
+  const seen = new Set();
+
+  for (let page = 1; page <= maxPages; page++) {
+    const params = new URLSearchParams({
+      ResultsPerPage: '100',
+      Page: String(page),
+      SortField: 'opendate',
+      SortDirection: 'desc',
+    });
+
+    const data = await fetchJson(`https://data.usajobs.gov/api/search?${params}`, { headers });
+    const items = data.SearchResult?.SearchResultItems ?? [];
+    if (!items.length) break;
+
+    for (const result of items) {
       const d = result.MatchedObjectDescriptor;
+      if (seen.has(result.MatchedObjectId)) continue;
+      seen.add(result.MatchedObjectId);
+
       const pay = d.PositionRemuneration?.[0];
       jobs.push({
         source: name,
@@ -40,7 +48,7 @@ export async function scrape({ keywords }) {
         salary: pay
           ? `$${Number(pay.MinimumRange).toLocaleString()} - $${Number(pay.MaximumRange).toLocaleString()} ${pay.RateIntervalCode === 'PA' ? '/yr' : ''}`.trim()
           : null,
-        description: truncate(d.UserArea?.Details?.JobSummary ?? d.QualificationSummary ?? ''),
+        description: truncateDescription(d.UserArea?.Details?.JobSummary ?? d.QualificationSummary ?? ''),
         postedAt: d.PublicationStartDate ? new Date(d.PublicationStartDate).toISOString() : null,
       });
     }

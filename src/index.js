@@ -1,77 +1,189 @@
 import 'dotenv/config';
 import config from '../config/config.js';
-import { matchKeywords, isExcluded, isTooOld } from './scrapers/utils.js';
-import { saveJobs, getUnsentJobs, markJobsSent } from './db/supabase.js';
+import { isTooOld, truncate } from './scrapers/utils.js';
+import { profileMatchesJob, isDueForDigest } from '../lib/matching.js';
+import { parseSalary, passesSalaryFilter } from '../lib/salary.js';
+import {
+  saveJobs,
+  expireOldJobs,
+  pruneBoardIfOverCapacity,
+  getActiveProfiles,
+  getLastScrapeAt,
+  upsertProfileMatch,
+  getUnsentMatchesForProfiles,
+  markMatchesEmailed,
+  updateProfileLastSent,
+  ensureDefaultSubscriber,
+} from './db/supabase.js';
 import { sendDigest } from './email/digest.js';
 
 import * as remoteok from './scrapers/remoteok.js';
 import * as remotive from './scrapers/remotive.js';
 import * as themuse from './scrapers/themuse.js';
-import * as arbeitnow from './scrapers/arbeitnow.js';
 import * as weworkremotely from './scrapers/weworkremotely.js';
 import * as hackernews from './scrapers/hackernews.js';
 import * as usajobs from './scrapers/usajobs.js';
 import * as dice from './scrapers/dice.js';
+import * as jobspresso from './scrapers/jobspresso.js';
+import * as authenticjobs from './scrapers/authenticjobs.js';
+import * as idealist from './scrapers/idealist.js';
+import * as workatastartup from './scrapers/workatastartup.js';
+import * as powertofly from './scrapers/powertofly.js';
 
 const ALL_SCRAPERS = [
   remoteok,
   remotive,
   themuse,
-  arbeitnow,
   weworkremotely,
   hackernews,
   usajobs,
   dice,
+  jobspresso,
+  authenticjobs,
+  idealist,
+  workatastartup,
+  powertofly,
 ];
 
 const DRY_RUN = process.env.DRY_RUN === '1';
+const SCRAPE_MODE = process.env.SCRAPE_MODE === 'full' ? 'full' : 'daily';
 
-async function main() {
+async function resolveMaxJobAgeDays() {
+  if (process.env.MAX_JOB_AGE_DAYS) {
+    return { days: Number(process.env.MAX_JOB_AGE_DAYS), reason: 'MAX_JOB_AGE_DAYS override' };
+  }
+  if (SCRAPE_MODE === 'full') {
+    return { days: config.maxJobAgeDays, reason: 'full backfill' };
+  }
+
+  const lastScrape = await getLastScrapeAt();
+  if (!lastScrape) {
+    return { days: config.dailyMaxJobAgeDays, reason: 'first run' };
+  }
+
+  const daysSince = (Date.now() - lastScrape.getTime()) / (24 * 60 * 60 * 1000);
+  const days = Math.min(
+    config.maxJobAgeDays,
+    Math.max(config.dailyMaxJobAgeDays, Math.ceil(daysSince) + 1)
+  );
+  const lastLabel = lastScrape.toISOString().slice(0, 10);
+  return { days, reason: `${Math.floor(daysSince)} days since last scrape (${lastLabel})` };
+}
+
+async function scrapeAll(maxJobAgeDays) {
   const scrapers = ALL_SCRAPERS.filter((s) => config.sources[s.name]);
-  console.log(`Running ${scrapers.length} scrapers for keywords: ${config.keywords.join(', ')}\n`);
+  const allJobs = [];
 
-  // 1. Scrape everything (one source failing shouldn't kill the run)
-  const matched = [];
   for (const scraper of scrapers) {
     try {
-      const jobs = await scraper.scrape({ keywords: config.keywords });
-      const kept = [];
-      for (const job of jobs) {
-        if (isTooOld(job, config.maxJobAgeDays)) continue;
-        if (isExcluded(job, config.excludeKeywords)) continue;
-        const hits = matchKeywords(job, config.keywords);
-        if (!hits.length) continue;
-        kept.push({ ...job, matchedKeywords: hits });
-      }
-      console.log(`  [${scraper.name}] ${jobs.length} jobs scraped, ${kept.length} matched`);
-      matched.push(...kept);
+      const jobs = await scraper.scrape({ mode: SCRAPE_MODE });
+      const fresh = jobs.filter((j) => !isTooOld(j, maxJobAgeDays));
+      const dropped = jobs.length - fresh.length;
+      const suffix = dropped ? `, ${dropped} older than ${maxJobAgeDays}d` : '';
+      console.log(`  [${scraper.name}] ${jobs.length} scraped → ${fresh.length} kept${suffix}`);
+      allJobs.push(...fresh);
     } catch (err) {
       console.error(`  [${scraper.name}] FAILED: ${err.message}`);
     }
   }
+  return allJobs;
+}
+
+async function main() {
+  await expireOldJobs();
+
+  let profiles = await getActiveProfiles();
+  if (!profiles.length && process.env.EMAIL_TO) {
+    await ensureDefaultSubscriber({
+      email: process.env.EMAIL_TO,
+      keywords: config.keywords,
+      excludeKeywords: config.excludeKeywords,
+    });
+    profiles = await getActiveProfiles();
+  }
+
+  const { days: maxJobAgeDays, reason: ageReason } = await resolveMaxJobAgeDays();
+  console.log(`Mode: ${SCRAPE_MODE} · keeping jobs posted within ${maxJobAgeDays} days (${ageReason})`);
+  console.log(`Running ${ALL_SCRAPERS.filter((s) => config.sources[s.name]).length} scrapers`);
+  console.log('Sources return mixed-age catalogs — only the age window is saved. Filter on the board.\n');
+
+  const scraped = await scrapeAll(maxJobAgeDays);
+  console.log(`\n${scraped.length} total jobs scraped`);
 
   if (DRY_RUN) {
-    console.log(`\nDRY RUN - would save ${matched.length} matched jobs:`);
-    for (const j of matched) {
-      console.log(`  - [${j.source}] ${j.title} @ ${j.company ?? '?'} (${j.url})`);
+    for (const p of profiles) {
+      let count = 0;
+      for (const job of scraped) {
+        const hits = profileMatchesJob(job, p);
+        if (hits && passesSalaryFilter({ ...job, salary_min_annual: null, salary_max_annual: null }, p)) count++;
+      }
+      console.log(`  [${p.name}] would match ~${count} jobs`);
     }
     return;
   }
 
-  // 2. Save to Supabase (dedupes against everything we've seen before)
-  const newCount = await saveJobs(matched);
-  console.log(`\n${matched.length} matched jobs, ${newCount} new (rest already seen)`);
+  const idMap = await saveJobs(scraped);
+  console.log(`Saved/updated ${idMap.size} jobs in database`);
 
-  // 3. Email everything that hasn't been sent yet
-  const unsent = await getUnsentJobs();
-  if (!unsent.length) {
-    console.log('Nothing new to send today.');
-    return;
+  await pruneBoardIfOverCapacity();
+
+  for (const profile of profiles) {
+    let matched = 0;
+    for (const job of scraped) {
+      const hits = profileMatchesJob(job, profile);
+      if (!hits) continue;
+
+      const sal = parseSalary(job.salary);
+      const jobWithSalary = {
+        ...job,
+        salary_min_annual: sal?.min ?? null,
+        salary_max_annual: sal?.max ?? null,
+      };
+      if (!passesSalaryFilter(jobWithSalary, profile)) continue;
+
+      const jobId = idMap.get(`${job.source}:${job.externalId}`);
+      if (!jobId) continue;
+
+      await upsertProfileMatch(profile.id, jobId, hits);
+      matched++;
+    }
+    console.log(`  [${profile.name}] ${matched} profile matches`);
   }
 
-  await sendDigest(unsent);
-  await markJobsSent(unsent.map((j) => j.id));
-  console.log(`Digest sent to ${process.env.EMAIL_TO} with ${unsent.length} jobs.`);
+  // Group due profiles by subscriber and send one email per subscriber
+  const bySubscriber = new Map();
+  for (const profile of profiles) {
+    if (!isDueForDigest(profile)) continue;
+    const subId = profile.subscribers.id;
+    if (!bySubscriber.has(subId)) {
+      bySubscriber.set(subId, { email: profile.subscribers.email, profileIds: [] });
+    }
+    bySubscriber.get(subId).profileIds.push(profile.id);
+  }
+
+  for (const [, { email, profileIds }] of bySubscriber) {
+    const matches = await getUnsentMatchesForProfiles(profileIds);
+    if (!matches.length) {
+      console.log(`Nothing new to send to ${email}`);
+      continue;
+    }
+
+    const jobs = matches.map((m) => ({
+      ...m.jobs,
+      matched_keywords: m.matched_keywords,
+      profile_name: m.search_profiles.name,
+      match_id: m.id,
+    }));
+
+    await sendDigest(jobs, { to: email });
+    await markMatchesEmailed(matches.map((m) => m.id));
+    await updateProfileLastSent(profileIds);
+    console.log(`Digest sent to ${email} with ${matches.length} jobs`);
+  }
+
+  if (!bySubscriber.size) {
+    console.log('No profiles due for digest today.');
+  }
 }
 
 main().catch((err) => {

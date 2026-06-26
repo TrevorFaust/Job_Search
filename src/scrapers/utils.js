@@ -1,5 +1,7 @@
 const USER_AGENT =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+
+export { USER_AGENT };
 
 export async function fetchJson(url, options = {}) {
   const res = await fetch(url, {
@@ -10,9 +12,19 @@ export async function fetchJson(url, options = {}) {
   return res.json();
 }
 
+/** Max chars stored for job descriptions (full posting text for the web app). */
+export const DESCRIPTION_MAX = 15000;
+
 export function stripHtml(html = '') {
   return html
-    .replace(/<[^>]*>/g, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '• ')
+    .replace(/<h[1-6][^>]*>/gi, '\n\n')
+    .replace(/<\/h[1-6]>/gi, '\n\n')
+    .replace(/<[^>]*>/g, '')
     .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
     .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number(dec)))
     .replace(/&nbsp;/g, ' ')
@@ -20,7 +32,8 @@ export function stripHtml(html = '') {
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&amp;/g, '&')
-    .replace(/\s+/g, ' ')
+    .replace(/[^\S\n]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
 
@@ -53,7 +66,28 @@ export function isTooOld(job, maxJobAgeDays) {
   return ageMs > maxJobAgeDays * 24 * 60 * 60 * 1000;
 }
 
-/** Trim descriptions so we don't bloat the database or the email. */
+/** Trim text; use DESCRIPTION_MAX for full job postings, shorter max for previews. */
 export function truncate(text = '', max = 500) {
   return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
+export function truncateDescription(text = '') {
+  return truncate(text, DESCRIPTION_MAX);
+}
+
+/** When the same job appears from multiple scrape paths, keep the richer record. */
+export function mergeJobRecords(prev, next) {
+  const prevDesc = prev.description ?? '';
+  const nextDesc = next.description ?? '';
+  const description = nextDesc.length > prevDesc.length ? nextDesc : prevDesc;
+
+  return {
+    ...prev,
+    ...next,
+    description,
+    company: next.company || prev.company,
+    location: next.location || prev.location,
+    salary: next.salary || prev.salary,
+    postedAt: next.postedAt || prev.postedAt,
+  };
 }

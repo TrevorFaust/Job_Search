@@ -1,4 +1,4 @@
-import { fetchJson, stripHtml, truncate } from './utils.js';
+import { fetchJson, stripHtml, truncateDescription } from './utils.js';
 
 export const name = 'hackernews';
 
@@ -30,7 +30,7 @@ export async function scrape() {
       location: parts.length > 2 ? parts[2] : null,
       url: `https://news.ycombinator.com/item?id=${comment.id}`,
       salary: null,
-      description: truncate(text),
+      description: truncateDescription(text),
       postedAt: comment.created_at ?? null,
     });
   }

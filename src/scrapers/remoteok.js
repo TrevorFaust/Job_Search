@@ -1,4 +1,4 @@
-import { fetchJson, stripHtml, truncate } from './utils.js';
+import { fetchJson, stripHtml, truncateDescription } from './utils.js';
 
 export const name = 'remoteok';
 
@@ -18,7 +18,7 @@ export async function scrape() {
         item.salary_min && item.salary_max
           ? `$${item.salary_min.toLocaleString()} - $${item.salary_max.toLocaleString()}`
           : null,
-      description: truncate(stripHtml(item.description)),
+      description: truncateDescription(stripHtml(item.description)),
       postedAt: item.date ? new Date(item.date).toISOString() : null,
     }));
 }

@@ -44,12 +44,28 @@ everything you've already seen, and emails you a digest of the new matches.
    max job age, and which sources to run. This is the only file you'll
    regularly touch.
 
-## Running
+## Running the scraper
 
 ```bash
 npm run dry   # scrape + filter, print matches, touch nothing (great for testing)
-npm start     # full run: scrape -> save to Supabase -> email digest
+npm start     # full run: scrape -> save to Supabase -> match profiles -> email digest
 ```
+
+## Web app (dashboard + preferences)
+
+```bash
+cd web
+cp .env.local.example .env.local   # add SUPABASE_SERVICE_ROLE_KEY
+npm run dev                        # http://localhost:3000
+```
+
+1. Enter your email on the home page (creates a subscriber if new).
+2. **Your board** — browse jobs with tabs: My matches, Not emailed yet, Past digests, All jobs. Sort by date, salary, company, or source.
+3. **Edit preferences** — add multiple hunt profiles (sports, energy, etc.), each with its own keywords, frequency, location, and min salary.
+
+Hourly salaries are normalized to annual: `$15–20/hr` → `$28,800–$38,400/yr` (40 hrs × 4 weeks × 12 months).
+
+Jobs stay on the board for ~3 weeks, then expire automatically.
 
 ## Daily automation (GitHub Actions)
 

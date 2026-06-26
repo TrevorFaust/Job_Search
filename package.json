@@ -5,8 +5,13 @@
   "type": "module",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "dry": "cross-env DRY_RUN=1 node src/index.js"
+    "start": "cross-env SCRAPE_MODE=daily node src/index.js",
+    "scrape:catchup": "cross-env SCRAPE_MODE=daily node src/index.js",
+    "scrape:full": "cross-env SCRAPE_MODE=full node src/index.js",
+    "web:dev": "npm run dev --prefix web",
+    "web:dev:clean": "npm run dev:clean --prefix web",
+    "dry": "cross-env DRY_RUN=1 SCRAPE_MODE=daily node src/index.js",
+    "dry:full": "cross-env DRY_RUN=1 SCRAPE_MODE=full node src/index.js"
   },
   "engines": {
     "node": ">=22"

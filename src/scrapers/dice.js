@@ -1,74 +1,131 @@
-import { truncate } from './utils.js';
+import { truncateDescription } from './utils.js';
+import {
+  enrichShortDescriptions,
+  launchBrowser,
+  newPage,
+  parseRelativePosted,
+  scrapeDiceSearch,
+} from './playwright/helpers.js';
 
 export const name = 'dice';
 
-/**
- * Dice has no public API, so this drives a real (headless) browser with
- * Playwright and reads the search result cards. We search Dice for each
- * keyword directly since it's a huge general-purpose board.
- *
- * NOTE: site redesigns will break this scraper. If it starts failing,
- * set `dice: false` in config/config.js until it's fixed.
- */
-export async function scrape({ keywords }) {
-  const { chromium } = await import('playwright');
-  const browser = await chromium.launch();
-  const jobs = [];
+const ALPHABET = 'abcdefghijklmnopqrstuvwxyz'.split('');
+
+/** All US states + DC — one Dice search each so onsite jobs aren't metro-only. */
+const US_STATES = [
+  'Alabama',
+  'Alaska',
+  'Arizona',
+  'Arkansas',
+  'California',
+  'Colorado',
+  'Connecticut',
+  'Delaware',
+  'District of Columbia',
+  'Florida',
+  'Georgia',
+  'Hawaii',
+  'Idaho',
+  'Illinois',
+  'Indiana',
+  'Iowa',
+  'Kansas',
+  'Kentucky',
+  'Louisiana',
+  'Maine',
+  'Maryland',
+  'Massachusetts',
+  'Michigan',
+  'Minnesota',
+  'Mississippi',
+  'Missouri',
+  'Montana',
+  'Nebraska',
+  'Nevada',
+  'New Hampshire',
+  'New Jersey',
+  'New Mexico',
+  'New York',
+  'North Carolina',
+  'North Dakota',
+  'Ohio',
+  'Oklahoma',
+  'Oregon',
+  'Pennsylvania',
+  'Rhode Island',
+  'South Carolina',
+  'South Dakota',
+  'Tennessee',
+  'Texas',
+  'Utah',
+  'Vermont',
+  'Virginia',
+  'Washington',
+  'West Virginia',
+  'Wisconsin',
+  'Wyoming',
+];
+
+/** Dice caps ~500 unique jobs per query — rotate keyword prefixes for coverage. */
+function nationalSearches(postedDate) {
+  return [
+    { q: '', postedDate, location: '' },
+    ...ALPHABET.map((q) => ({ q, postedDate, location: '' })),
+  ];
+}
+
+/** One recent-jobs search per state (Connecticut, Florida, Tennessee, etc.). */
+function stateSearches(postedDate, deep = false) {
+  const splitLetters = deep ? ['a', 'e', 'i', 'o', 's', 't'] : [];
+
+  return US_STATES.flatMap((location) => [
+    { q: '', postedDate, location },
+    ...splitLetters.map((q) => ({ q, postedDate, location })),
+  ]);
+}
+
+const FULL_SEARCHES = [...nationalSearches(7), ...stateSearches(30, true)];
+
+const DAILY_SEARCHES = [...nationalSearches(3), ...stateSearches(3, false)];
+
+export async function scrape({ mode = 'daily' } = {}) {
+  const browser = await launchBrowser();
+  const map = new Map();
+  const searches = mode === 'full' ? FULL_SEARCHES : DAILY_SEARCHES;
+  const maxPages = mode === 'full' ? 25 : 10;
 
   try {
-    const page = await browser.newPage();
-    for (const keyword of keywords) {
-      const url = `https://www.dice.com/jobs?q=${encodeURIComponent(keyword)}&countryCode=US&radius=30&radiusUnit=mi&pageSize=20&language=en`;
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    const page = await newPage(browser);
 
-      // Wait for job cards; if none appear the search had no results
-      const found = await page
-        .waitForSelector('a[data-testid="job-search-job-detail-link"], [data-testid="job-card"]', {
-          timeout: 15000,
-        })
-        .then(() => true)
-        .catch(() => false);
-      if (!found) continue;
-
-      const cards = await page.$$eval('[data-testid="job-card"]', (els) =>
-        els.map((el) => {
-          const link = el.querySelector('a[data-testid="job-search-job-detail-link"]');
-          // Metadata row reads: "Location • Posted date"
-          const meta = [...el.querySelectorAll('p')]
-            .map((p) => p.textContent.trim())
-            .filter((t) => t && t !== '•');
-          return {
-            title: link?.textContent?.trim() ?? null,
-            url: link?.href ?? null,
-            company:
-              el.querySelector('a[href*="company-profile"] p')?.textContent?.trim() ??
-              el.querySelector('a[href*="company-profile"] img')?.alt ??
-              null,
-            location: meta.find((t) => /,|remote|hybrid/i.test(t)) ?? null,
-            salary: el.querySelector('#salary-label')?.textContent?.trim() ?? null,
-            description: el.querySelector('p.line-clamp-2')?.textContent?.trim() ?? '',
-          };
-        })
-      );
-
-      for (const card of cards) {
-        if (!card.title || !card.url) continue;
-        jobs.push({
-          source: name,
-          externalId: card.url.split('?')[0],
-          title: card.title,
-          company: card.company,
-          location: card.location,
-          url: card.url,
-          salary: card.salary,
-          description: truncate(card.description),
-          postedAt: null,
-        });
+    for (const search of searches) {
+      const label = [search.location || 'US-wide', search.q || '(all)'].join(' · ');
+      await scrapeDiceSearch(page, { ...search, maxPages }, map);
+      if (mode === 'full' || search.location) {
+        console.log(`  [${name}] ${label} → ${map.size} unique so far`);
       }
     }
+
+    const jobs = [...map.values()].map((card) => {
+      const key = card.url.split('?')[0];
+      return {
+        source: name,
+        externalId: key,
+        title: card.title,
+        company: card.company,
+        location: card.location,
+        url: card.url,
+        salary: card.salary,
+        description: truncateDescription(card.description),
+        postedAt: parseRelativePosted(card.posted),
+      };
+    });
+
+    await enrichShortDescriptions(page, jobs, {
+      maxFetch: mode === 'full' ? 100 : 50,
+    });
+
+    return jobs;
   } finally {
     await browser.close();
   }
-
-  return jobs;
 }
