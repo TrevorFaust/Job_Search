@@ -2,6 +2,7 @@
 
 import { useTransition } from 'react';
 import { updateApplicationStage } from '@/lib/application-actions';
+import { useInvalidateBoardCache } from '@/lib/board-cache';
 import {
   APPLICATION_STAGES,
   STAGE_LABELS,
@@ -24,6 +25,7 @@ type Props = {
 
 export function ApplicationStageSelect({ jobId, manualJobId, stage, compact }: Props) {
   const [pending, startTransition] = useTransition();
+  const invalidateBoard = useInvalidateBoardCache();
 
   function handleChange(next: ApplicationStage) {
     const fd = new FormData();
@@ -32,6 +34,7 @@ export function ApplicationStageSelect({ jobId, manualJobId, stage, compact }: P
     fd.set('stage', next);
     startTransition(async () => {
       await updateApplicationStage(fd);
+      invalidateBoard();
     });
   }
 

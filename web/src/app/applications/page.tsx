@@ -2,6 +2,9 @@ import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { BoardHomeLink } from '@/components/BoardHomeLink';
+import { DismissJobButton } from '@/components/DismissJobButton';
+import { FitLevelBadge } from '@/components/FitLevelBadge';
+import { getAppliedJobExclusions, getDismissedJobExclusions } from '@/lib/applications';
 import { getSubscriberByToken } from '@/lib/queries';
 import { listManualJobs } from '@/lib/resume-queries';
 
@@ -22,7 +25,15 @@ export default async function ApplicationsPage() {
   const subscriber = await getSubscriberByToken(token);
   if (!subscriber) redirect('/sign-in');
 
-  const jobs = await listManualJobs(subscriber.id);
+  const [allJobs, appliedExclusions, dismissedExclusions] = await Promise.all([
+    listManualJobs(subscriber.id),
+    getAppliedJobExclusions(subscriber.id),
+    getDismissedJobExclusions(subscriber.id),
+  ]);
+  const jobs = allJobs.filter(
+    (job) =>
+      !appliedExclusions.manualIds.has(job.id) && !dismissedExclusions.manualIds.has(job.id)
+  );
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
@@ -36,6 +47,11 @@ export default async function ApplicationsPage() {
           </h1>
           <p className="mt-2 text-sm text-zinc-500">
             Jobs you pasted in yourself — not from our scrapers. Tailor a resume for each one.
+            Once you apply, they move to the{' '}
+            <Link href="/?view=applied" className="text-amber-400 hover:text-amber-300">
+              Applied tab
+            </Link>
+            .
           </p>
         </div>
         <Link
@@ -48,15 +64,27 @@ export default async function ApplicationsPage() {
 
       {jobs.length === 0 ? (
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-10 text-center">
-          <p className="text-zinc-400">No manual jobs yet.</p>
+          <p className="text-zinc-400">
+            {allJobs.length > 0 ? 'No jobs waiting to apply.' : 'No manual jobs yet.'}
+          </p>
           <p className="mt-2 text-sm text-zinc-500">
-            Paste a listing from anywhere and we&apos;ll walk you through tailoring your resume.
+            {allJobs.length > 0 ? (
+              <>
+                Jobs you&apos;ve marked as applied are on the{' '}
+                <Link href="/?view=applied" className="text-amber-400 hover:text-amber-300">
+                  Applied tab
+                </Link>
+                .
+              </>
+            ) : (
+              <>Paste a listing from anywhere and we&apos;ll walk you through tailoring your resume.</>
+            )}
           </p>
           <Link
             href="/tailor/add"
             className="mt-6 inline-block text-sm font-medium text-amber-400 hover:text-amber-300"
           >
-            Add your first job →
+            {allJobs.length > 0 ? 'Add another job →' : 'Add your first job →'}
           </Link>
         </div>
       ) : (
@@ -65,12 +93,17 @@ export default async function ApplicationsPage() {
             <li key={job.id} className="p-5 transition hover:bg-zinc-900">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <Link
-                    href={`/tailor/manual/${job.id}`}
-                    className="text-lg font-semibold text-zinc-50 hover:text-amber-300"
-                  >
-                    {job.title}
-                  </Link>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link
+                      href={`/tailor/manual/${job.id}`}
+                      className="text-lg font-semibold text-zinc-50 hover:text-amber-300"
+                    >
+                      {job.title}
+                    </Link>
+                    {job.fit_level && (
+                      <FitLevelBadge fitLevel={job.fit_level} fitScore={job.fit_score} />
+                    )}
+                  </div>
                   <p className="mt-1 text-sm text-zinc-400">
                     {job.company ?? 'Company not set'}
                     {job.location ? ` · ${job.location}` : ''}
@@ -90,6 +123,12 @@ export default async function ApplicationsPage() {
                   >
                     {job.has_output ? 'View draft →' : 'Continue tailoring →'}
                   </Link>
+                  <DismissJobButton
+                    manualJobId={job.id}
+                    redirectTo="/applications"
+                    label="Listing unavailable — remove"
+                    className="mt-2 text-xs text-zinc-500 hover:text-zinc-300"
+                  />
                 </div>
               </div>
               {job.url && (

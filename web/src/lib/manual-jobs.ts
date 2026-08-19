@@ -1,3 +1,5 @@
+import type { FitLevel } from './fit-level';
+
 /** Job shape used by the tailor wizard (scraped or manual). */
 export type TailorJobView = {
   id: string;
@@ -29,6 +31,8 @@ export type ManualJobWithSession = ManualJob & {
   session_id: string | null;
   session_status: string | null;
   has_output: boolean;
+  fit_level?: FitLevel;
+  fit_score?: number;
 };
 
 export function manualJobToView(job: ManualJob): TailorJobView {

@@ -81,13 +81,45 @@ export function mergeJobRecords(prev, next) {
   const nextDesc = next.description ?? '';
   const description = nextDesc.length > prevDesc.length ? nextDesc : prevDesc;
 
+  const prevTitle = prev.title ?? '';
+  const nextTitle = next.title ?? '';
+  const title = isJunkTitle(nextTitle)
+    ? prevTitle || nextTitle
+    : isJunkTitle(prevTitle) || nextTitle.length >= prevTitle.length
+      ? nextTitle
+      : prevTitle;
+
   return {
     ...prev,
     ...next,
+    title,
     description,
     company: next.company || prev.company,
     location: next.location || prev.location,
     salary: next.salary || prev.salary,
     postedAt: next.postedAt || prev.postedAt,
   };
+}
+
+const JUNK_TITLE_RE =
+  /^(copy link|saved jobs|clear all|apply now|save job|job details|share)$/i;
+
+/** Titles scraped from nav/buttons rather than the posting itself. */
+export function isJunkTitle(title = '') {
+  const t = title.trim();
+  return !t || t.length < 4 || JUNK_TITLE_RE.test(t);
+}
+
+/** Drop listings that would mislead the board after enrichment. */
+export function isPublishableJob(job) {
+  return !isJunkTitle(job.title);
+}
+
+/** Snippet is too short or is just the company name (common Dice list-card mistake). */
+export function isJunkDescription(job, minLength = 120) {
+  const desc = (job.description ?? '').trim();
+  if (!desc || desc.length < minLength) return true;
+  const company = (job.company ?? '').trim();
+  if (company && desc.toLowerCase() === company.toLowerCase()) return true;
+  return false;
 }

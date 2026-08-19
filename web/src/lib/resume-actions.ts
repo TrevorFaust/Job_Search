@@ -24,7 +24,7 @@ import {
   mergeQuestionsWithBank,
   upsertAnswerBank,
 } from './tailor-answer-bank';
-import { analyzeResumeForJob, generateTailoredResume, type GapAnalysis, type TailorAnswer } from './llm';
+import { analyzeResumeForJob, generateCoverLetter, generateTailoredResume, type GapAnalysis, type TailorAnswer } from './llm';
 
 const COOKIE_NAME = 'jh_token';
 
@@ -234,25 +234,68 @@ export async function generateTailoredDraft(
         ? resume.format_meta
         : extractResumeStructure(resume.content_text);
 
-    const output_text = await generateTailoredResume(
-      resume.content_text,
-      { title: job.title, company: job.company, description: job.description },
-      gapAnalysis,
-      fullAnswers,
-      {
-        extraContext: context,
-        pageLength: pagePreference,
-        formatMeta,
-      }
-    );
+    const [output_text, cover_letter_text] = await Promise.all([
+      generateTailoredResume(
+        resume.content_text,
+        { title: job.title, company: job.company, description: job.description },
+        gapAnalysis,
+        fullAnswers,
+        {
+          extraContext: context,
+          pageLength: pagePreference,
+          formatMeta,
+        }
+      ),
+      generateCoverLetter(
+        resume.content_text,
+        { title: job.title, company: job.company, description: job.description },
+        gapAnalysis,
+        fullAnswers,
+        { extraContext: context }
+      ),
+    ]);
 
-    await updateSession(sessionId, sub.id, { status: 'done', output_text });
-    return { output_text };
+    await updateSession(sessionId, sub.id, { status: 'done', output_text, cover_letter_text });
+    return { output_text, cover_letter_text };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Generation failed';
     await updateSession(sessionId, sub.id, { status: 'failed', error_message: message });
     throw err;
   }
+}
+
+export async function generateCoverLetterDraft(sessionId: string, extraContext = '') {
+  const sub = await requireSubscriber();
+  const session = await getTailoringSession(sessionId, sub.id);
+  if (!session) throw new Error('Session not found');
+  if (session.status !== 'done' || !session.output_text) {
+    throw new Error('Generate the resume draft first');
+  }
+
+  const bank = await getAnswerBank(sub.id);
+  const [resume, job] = await Promise.all([
+    getActiveResume(sub.id),
+    resolveJobForSession(session, sub.id),
+  ]);
+  if (!resume || !job?.description) throw new Error('Missing resume or job');
+
+  const context = extraContext.trim() || session.extra_context || '';
+  const gapAnalysis: GapAnalysis =
+    session.gap_analysis && 'summary' in session.gap_analysis
+      ? (session.gap_analysis as GapAnalysis)
+      : { strong_matches: [], partial_matches: [], gaps: [], summary: '' };
+  const fullAnswers = buildFullAnswerSet(session.questions, session.answers, bank);
+
+  const cover_letter_text = await generateCoverLetter(
+    resume.content_text,
+    { title: job.title, company: job.company, description: job.description },
+    gapAnalysis,
+    fullAnswers,
+    { extraContext: context }
+  );
+
+  await updateSession(sessionId, sub.id, { cover_letter_text });
+  return { cover_letter_text };
 }
 
 export async function resetTailorSession(sessionId: string) {

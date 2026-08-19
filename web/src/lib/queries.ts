@@ -10,7 +10,9 @@ import {
 } from './filters';
 import { filterByCategories } from './categories';
 import type { ApplicationStage } from './applications';
+import type { FitLevel } from './fit-level';
 import type { ManualJob } from './manual-jobs';
+import { hydrateFitLevels } from './job-fit';
 import { manualJobToBoardView } from './manual-jobs';
 
 export type SortKey = 'date' | 'date_asc' | 'salary_high' | 'salary_low';
@@ -36,6 +38,7 @@ export type Job = {
   posted_at: string | null;
   created_at: string;
   status: string;
+  is_special?: boolean;
 };
 
 export type SearchProfile = {
@@ -64,6 +67,9 @@ export type JobView = Job & {
   emailed_at?: string | null;
   application_stage?: ApplicationStage;
   applied_at?: string;
+  interview_prep?: Record<string, unknown>;
+  fit_level?: FitLevel;
+  fit_score?: number;
   isManual?: boolean;
   manual_job_id?: string;
 };
@@ -77,10 +83,10 @@ export type PaginatedJobs = {
 
 /** Columns for list views — description is loaded only for the current page. */
 const JOB_LIST_SELECT =
-  'id, source, title, company, location, url, salary, salary_min_annual, salary_max_annual, posted_at, created_at, status';
+  'id, source, title, company, location, url, salary, salary_min_annual, salary_max_annual, posted_at, created_at, status, is_special';
 
 const JOB_LIST_SELECT_WITH_DESCRIPTION =
-  'id, source, title, company, location, url, salary, salary_min_annual, salary_max_annual, posted_at, created_at, status, description';
+  'id, source, title, company, location, url, salary, salary_min_annual, salary_max_annual, posted_at, created_at, status, is_special, description';
 
 type JobListRow = Omit<Job, 'description'> & { description?: string | null };
 
@@ -322,6 +328,9 @@ export async function getAllJobs(
   const paginated = toPaginated(jobs, page);
   if (!includeDescription) {
     paginated.jobs = await hydrateDescriptions(paginated.jobs);
+  }
+  if (subscriberId) {
+    paginated.jobs = await hydrateFitLevels(subscriberId, paginated.jobs);
   }
   return paginated;
 }

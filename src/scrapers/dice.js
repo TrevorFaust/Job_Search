@@ -1,6 +1,6 @@
-import { truncateDescription } from './utils.js';
+import { isJunkDescription, stripHtml, truncateDescription } from './utils.js';
 import {
-  enrichShortDescriptions,
+  enrichJobsFromDetailPages,
   launchBrowser,
   newPage,
   parseRelativePosted,
@@ -8,6 +8,89 @@ import {
 } from './playwright/helpers.js';
 
 export const name = 'dice';
+
+async function fetchDiceDetail(page, url) {
+  try {
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(500);
+
+    const raw = await page.evaluate(() => {
+      const scripts = [
+        ...document.querySelectorAll('script[type="application/ld+json"]'),
+        ...document.querySelectorAll('script[data-testid="jobDetailStructuredData"]'),
+      ];
+
+      let posting = null;
+      for (const script of scripts) {
+        try {
+          const data = JSON.parse(script.textContent);
+          const items = Array.isArray(data) ? data : [data];
+          posting = items.find((item) => item?.['@type'] === 'JobPosting') ?? posting;
+        } catch {
+          /* ignore malformed JSON-LD */
+        }
+      }
+
+      const headerCompany =
+        document.querySelector('a[href*="company-profile"] p')?.textContent?.trim() ??
+        document.querySelector('[data-testid="job-detail-header-card"]')?.innerText
+          ?.split('\n')
+          .map((l) => l.trim())
+          .find(Boolean) ??
+        null;
+
+      if (!posting) {
+        return { company: headerCompany, description: '' };
+      }
+
+      let location = null;
+      const jobLocation = posting.jobLocation;
+      const locations = jobLocation ? (Array.isArray(jobLocation) ? jobLocation : [jobLocation]) : [];
+      for (const loc of locations) {
+        const address = loc?.address;
+        if (address) {
+          location =
+            [address.addressLocality, address.addressRegion].filter(Boolean).join(', ') ||
+            address.addressCountry ||
+            null;
+        } else if (loc?.name) {
+          location = loc.name;
+        }
+        if (location) break;
+      }
+
+      let salary = null;
+      const comp = posting.baseSalary ?? posting.estimatedSalary;
+      const value = comp?.value;
+      if (value) {
+        const min = value.minValue ?? value.value;
+        const max = value.maxValue ?? value.value;
+        const unit = (value.unitText ?? comp.currency ?? '').replace(/_/g, ' ');
+        if (min != null && max != null && min !== max) {
+          salary = `$${Number(min).toLocaleString()} - $${Number(max).toLocaleString()} ${unit}`.trim();
+        } else if (min != null) {
+          salary = `$${Number(min).toLocaleString()} ${unit}`.trim();
+        }
+      }
+
+      return {
+        title: posting.title ?? document.querySelector('h1')?.textContent?.trim() ?? null,
+        company: posting.hiringOrganization?.name ?? headerCompany,
+        location,
+        salary,
+        postedAt: posting.datePosted ?? null,
+        description: posting.description ?? '',
+      };
+    });
+
+    return {
+      ...raw,
+      description: truncateDescription(stripHtml(raw.description ?? '')),
+    };
+  } catch {
+    return {};
+  }
+}
 
 const ALPHABET = 'abcdefghijklmnopqrstuvwxyz'.split('');
 
@@ -120,9 +203,17 @@ export async function scrape({ mode = 'daily' } = {}) {
       };
     });
 
-    await enrichShortDescriptions(page, jobs, {
+    await enrichJobsFromDetailPages(page, jobs, fetchDiceDetail, {
       maxFetch: mode === 'full' ? 100 : 50,
+      needsEnrichment: (job) => !job.company || isJunkDescription(job),
+      overwriteFields: ['company'],
     });
+
+    for (const job of jobs) {
+      if (job.postedAt && typeof job.postedAt === 'string' && !job.postedAt.includes('T')) {
+        job.postedAt = new Date(job.postedAt).toISOString();
+      }
+    }
 
     return jobs;
   } finally {

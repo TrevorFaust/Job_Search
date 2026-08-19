@@ -5,6 +5,8 @@ import {
   stripResumeBulletPrefixes,
   type ResumeFormatMeta,
 } from './resume-structure';
+import { normalizeFitScore } from './fit-level';
+import type { FitLevel } from './fit-level';
 
 export type GapItem = {
   skill: string;
@@ -25,7 +27,9 @@ export type GapAnalysis = {
   partial_matches: PartialMatch[];
   gaps: GapRequirement[];
   summary: string;
-  fit_level?: 'strong' | 'moderate' | 'stretch' | 'long_shot';
+  fit_level?: FitLevel;
+  /** Likelihood of getting an interview/offer with a tailored resume (0–10, one decimal). */
+  fit_score?: number;
 };
 
 export type TailorQuestion = {
@@ -49,6 +53,43 @@ export type GenerateOptions = {
   formatMeta?: ResumeFormatMeta;
 };
 
+export type InterviewQuestionCategory =
+  | 'behavioral'
+  | 'technical'
+  | 'role_specific'
+  | 'situational';
+
+export type InterviewQuestion = {
+  id: string;
+  question: string;
+  category: InterviewQuestionCategory;
+  why_they_ask: string;
+  framing_tips: string;
+  sample_answer: string;
+  strength_to_highlight?: string;
+  weakness_to_address?: string;
+};
+
+export type InterviewPrepResult = {
+  overview: string;
+  questions: InterviewQuestion[];
+};
+
+export type InterviewPrepContext = {
+  resumeText: string;
+  job: { title: string; company: string | null; description: string };
+  gapAnalysis?: GapAnalysis | null;
+  priorAnswers?: TailorAnswer[];
+  extraContext?: string;
+};
+
+export type InterviewQuestionAnswerResult = {
+  talking_track: string;
+  framing: string;
+  evidence: string[];
+  watch_outs?: string;
+};
+
 function getClient() {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error('ANTHROPIC_API_KEY is not configured');
@@ -57,6 +98,24 @@ function getClient() {
 
 function getModel() {
   return process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6';
+}
+
+function getInterviewModel() {
+  return process.env.ANTHROPIC_INTERVIEW_MODEL ?? 'claude-haiku-4-5-20251001';
+}
+
+function compactGapAnalysis(gap: GapAnalysis) {
+  return {
+    summary: gap.summary,
+    fit_level: gap.fit_level,
+    fit_score: gap.fit_score,
+    strong_matches: gap.strong_matches.slice(0, 8),
+    partial_matches: gap.partial_matches.slice(0, 6).map((m) => ({
+      skill: m.skill,
+      reframe_suggestion: m.reframe_suggestion,
+    })),
+    gaps: gap.gaps.slice(0, 8),
+  };
 }
 
 function parseJsonResponse<T>(text: string): T {
@@ -78,10 +137,15 @@ function directVoice(text: string, resumeText: string) {
   return addressCandidateDirectly(text, guessCandidateName(resumeText));
 }
 
-async function claudeText(system: string, user: string, maxTokens = 8192): Promise<string> {
+async function claudeText(
+  system: string,
+  user: string,
+  maxTokens = 8192,
+  model?: string
+): Promise<string> {
   const client = getClient();
   const response = await client.messages.create({
-    model: getModel(),
+    model: model ?? getModel(),
     max_tokens: maxTokens,
     system,
     messages: [{ role: 'user', content: user }],
@@ -120,6 +184,7 @@ Other rules:
 - NEVER invent experience for the candidate.
 - Note honest reframing angles even for stretch roles.
 - Set fit_level: strong | moderate | stretch | long_shot.
+- Set fit_score: a number from 0.0 to 10.0 (one decimal place, any tenth is allowed) for how likely the candidate is to get this job with a well-tailored resume. Rough guide: 0.0 = absurd long shot (e.g. CEO of an unrelated company); ~3–4 = long_shot; ~5–6 = stretch; ~7–8 = moderate; ~9–10 = strong / possibly overqualified — if they apply they should get it. Align score with fit_level but use the decimal to differentiate within a band.
 - If prior_answers are provided, do NOT re-ask similar questions.
 - Respond with a single JSON object only — no markdown fences.`;
 
@@ -152,7 +217,7 @@ If fit is weak: still produce a full one-page resume — heavily tailor Profile/
 
 Rewriting principles:
 1. Mirror JD language where truthful (ATS keywords).
-2. Impact lines: [Verb] + [action] + [result/scale when available].
+2. Impact lines: lead with the quantified result, then the action that drove it — [Verb] + [result/metric] + [by/through action or context]. Put numbers near the front of the sentence, not buried at the end. Example: "Saved 700 labor hours and $2M annually by analyzing production workflows and capacity data to identify operational bottlenecks and implement scheduling improvements." NOT "Analyzed... implementing... that saved 700 labor hours and $2M annually."
 3. Within each role, lead with the most relevant accomplishments.
 4. Tailor Profile/Summary in 2–3 tight sentences focused on this role.
 5. Vary action verbs — no repeating the same verb across lines (use synonyms: built/constructed/developed/engineered/etc.).
@@ -188,6 +253,7 @@ export async function analyzeResumeForJob(
         gaps: [{ requirement: 'string', severity: 'required | preferred' }],
         summary: '2-3 sentences speaking directly to the reader as "you"',
         fit_level: 'strong | moderate | stretch | long_shot',
+        fit_score: 'number 0.0–10.0 with one decimal (likelihood of landing the job with a tailored resume)',
       },
       questions: [
         {
@@ -209,9 +275,12 @@ export async function analyzeResumeForJob(
   const parsed = parseJsonResponse<{ gap_analysis: GapAnalysis; questions: TailorQuestion[] }>(raw);
   const gap = parsed.gap_analysis;
 
+  const fitScore = normalizeFitScore(gap.fit_score);
+
   return {
     gap_analysis: {
       ...gap,
+      fit_score: fitScore,
       summary: directVoice(gap.summary, resumeText),
       strong_matches: (gap.strong_matches ?? []).map((m) => ({
         ...m,
@@ -271,4 +340,244 @@ export async function generateTailoredResume(
   const text = await claudeText(GENERATE_SYSTEM, user, 12000);
   if (!text) throw new Error('Empty response from AI');
   return stripResumeBulletPrefixes(text);
+}
+
+const COVER_LETTER_SYSTEM = `You are an expert career coach and cover letter writer with 15+ years of experience helping candidates land competitive roles.
+
+Write a concise, professional cover letter tailored to THIS specific job and company.
+
+Tone (critical):
+- Confident, forward-looking, and enthusiastic — you are pitching the candidate, not auditing them.
+- Lead with what they bring: relevant wins, transferable skills, and genuine interest in the role.
+- NEVER apologize, disclaim, or call out missing requirements (e.g. do NOT write "I don't have X", "I will be upfront that I lack…", "While I haven't…", or similar admissions).
+- If the fit is a stretch, stay positive: emphasize adjacent experience, learning agility, and motivation — without naming gaps or unmet requirements.
+- Gap/mismatch notes in the input are for your awareness only so you do not invent credentials — never surface them in the letter.
+
+Rules:
+- ONE PAGE ONLY — target 250–400 words in the body (3–4 short paragraphs).
+- Use standard business letter format: candidate name and contact info at top (extract from resume), date, company name, salutation, body, professional closing (e.g. "Sincerely,"), and typed name.
+- First person throughout — write as the candidate ("I", "my", "me").
+- Ground every claim in the resume and Q&A — NEVER invent employers, projects, degrees, or skills.
+- Open with a specific hook: why THIS role at THIS company (not generic enthusiasm).
+- Highlight 2–3 strongest, most relevant accomplishments that map to the job requirements.
+- Mirror key language from the job description where truthful.
+- Close with a confident call to action (e.g. look forward to discussing how your experience can contribute).
+- Do NOT add markdown, code fences, commentary, or notes after the letter.
+- Output the complete letter text only — ready to copy or print.`;
+
+function compactCoverLetterContext(gap: GapAnalysis) {
+  return {
+    summary: gap.summary,
+    fit_level: gap.fit_level,
+    fit_score: gap.fit_score,
+    strong_matches: gap.strong_matches.slice(0, 8),
+    reframe_angles: gap.partial_matches.slice(0, 6).map((m) => ({
+      skill: m.skill,
+      angle: m.reframe_suggestion,
+    })),
+  };
+}
+
+export async function generateCoverLetter(
+  resumeText: string,
+  job: { title: string; company: string | null; description: string },
+  gapAnalysis: GapAnalysis,
+  answers: TailorAnswer[],
+  options: Pick<GenerateOptions, 'extraContext'> = {}
+): Promise<string> {
+  const user = [
+    `Job title: ${job.title}`,
+    `Company: ${job.company ?? 'Unknown'}`,
+    '',
+    'Job description:',
+    job.description.slice(0, 8000),
+    '',
+    'Candidate resume (source of truth for name, contact, and experience):',
+    resumeText.slice(0, 8000),
+    '',
+    'Strengths and reframe angles (use for confident positioning — do NOT mention gaps or missing skills):',
+    JSON.stringify(compactCoverLetterContext(gapAnalysis)),
+    '',
+    'Candidate Q&A (authoritative — do not go beyond these confirmations):',
+    JSON.stringify(answers.slice(0, 12)),
+    '',
+    'Additional context from the candidate:',
+    options.extraContext?.trim() || '(none provided)',
+    '',
+    'Write the one-page cover letter now. Confident tone throughout — no disclaimers about missing skills. Extract name and contact from the resume for the header.',
+  ].join('\n');
+
+  const text = await claudeText(COVER_LETTER_SYSTEM, user, 4096);
+  if (!text) throw new Error('Empty cover letter response from AI');
+  return text.trim();
+}
+
+const INTERVIEW_PREP_SYSTEM = `You are an expert interview coach helping a candidate prepare for a specific job interview.
+
+Generate realistic interview questions they are likely to face for THIS role, paired with personalized answer guidance.
+
+Rules:
+- Speak directly TO the candidate using "you" and "your" — never third person.
+- NEVER invent employers, projects, degrees, or skills not supported by the resume or prior answers.
+- Ground sample answers in their actual background. When evidence is thin, suggest honest framing (transferable skills, learning plans) — do not fabricate.
+- Include a mix: behavioral (STAR-style), role-specific, technical or skills-based (appropriate to the job), and situational.
+- For each question, call out a strength to highlight when relevant, or a weakness/gap to address carefully when relevant.
+- sample_answer should be 3–6 sentences — a concrete talking track, not bullet fragments.
+- framing_tips: how to structure the answer (e.g. STAR, lead with outcome, acknowledge gap then pivot).
+- Generate 6–8 questions total.
+- Respond with a single JSON object only — no markdown fences.`;
+
+export async function generateInterviewQuestions(
+  context: InterviewPrepContext
+): Promise<InterviewPrepResult> {
+  const priorAnswers = (context.priorAnswers ?? []).slice(0, 12).map((a) => ({
+    question: a.question ?? a.question_id,
+    answer: a.answer.slice(0, 500),
+    related_requirement: a.related_requirement ?? '',
+  }));
+
+  const userPrompt = JSON.stringify({
+    job: {
+      title: context.job.title,
+      company: context.job.company,
+      description: context.job.description.slice(0, 6000),
+    },
+    resume: context.resumeText.slice(0, 6000),
+    gap_analysis: context.gapAnalysis ? compactGapAnalysis(context.gapAnalysis) : null,
+    prior_answers: priorAnswers.length ? priorAnswers : null,
+    extra_context: context.extraContext?.trim().slice(0, 1500) || null,
+    output_schema: {
+      overview: '2-3 sentences on interview focus areas for this role, speaking to the reader as "you"',
+      questions: [
+        {
+          id: 'iq1',
+          question: 'string',
+          category: 'behavioral | technical | role_specific | situational',
+          why_they_ask: 'string (use "you")',
+          framing_tips: 'string (use "you")',
+          sample_answer: 'string — first person implied, grounded in their background',
+          strength_to_highlight: 'optional string',
+          weakness_to_address: 'optional string',
+        },
+      ],
+    },
+  });
+
+  const raw = await claudeText(
+    INTERVIEW_PREP_SYSTEM,
+    `Generate interview prep for this candidate and role. Return JSON with overview and 6–8 questions.\n\n${userPrompt}`,
+    6000,
+    getInterviewModel()
+  );
+
+  const parsed = parseJsonResponse<InterviewPrepResult>(raw);
+
+  return {
+    overview: directVoice(parsed.overview ?? '', context.resumeText),
+    questions: (parsed.questions ?? []).slice(0, 8).map((q, i) => ({
+      ...q,
+      id: q.id || `iq${i + 1}`,
+      question: directVoice(q.question, context.resumeText),
+      why_they_ask: directVoice(q.why_they_ask, context.resumeText),
+      framing_tips: directVoice(q.framing_tips, context.resumeText),
+      sample_answer: directVoice(q.sample_answer, context.resumeText),
+      strength_to_highlight: q.strength_to_highlight
+        ? directVoice(q.strength_to_highlight, context.resumeText)
+        : undefined,
+      weakness_to_address: q.weakness_to_address
+        ? directVoice(q.weakness_to_address, context.resumeText)
+        : undefined,
+    })),
+  };
+}
+
+const INTERVIEW_ANSWER_SYSTEM = `You are an expert interview coach. The candidate pasted a question they were actually asked (or expect to be asked). Draft a spoken answer grounded ONLY in their resume, prior Q&A from resume tailoring, extra context they provided, and this job.
+
+Rules:
+- talking_track: first person as the candidate ("I", "my") — 4–8 conversational sentences they can say out loud. Use STAR (situation, task, action, result) when it fits. Include concrete names, metrics, and outcomes from the source material.
+- framing: 1–3 sentences coaching THEM with "you" on how to structure and land the answer.
+- evidence: 2–5 short phrases naming the resume / Q&A facts you used. If you used none, say so.
+- watch_outs: optional. What to avoid (claiming a skill they don't have, rambling, underselling). Use "you".
+- NEVER invent employers, titles, dates, projects, metrics, degrees, or skills.
+- If they lack a direct example, give an honest adjacent story and a brief learning/pivot line — do not fabricate.
+- Respond with a single JSON object only — no markdown fences.`;
+
+export type InterviewAnswerRevision = {
+  previous: InterviewQuestionAnswerResult;
+  notes: string;
+};
+
+const INTERVIEW_ANSWER_REVISE_SYSTEM = `You are an expert interview coach. The candidate already likes a drafted spoken answer and asked for a light edit.
+
+Rules:
+- Keep the same story, structure, length, and most of the wording.
+- Apply ONLY the requested tweaks. Do not rewrite from scratch. Do not swap in a different example unless they asked.
+- talking_track stays first person ("I", "my") and ready to say out loud.
+- framing and watch_outs still coach THEM with "you".
+- evidence should still name the resume / Q&A facts used.
+- NEVER invent employers, titles, dates, projects, metrics, degrees, or skills.
+- If a tweak would require invented experience, keep the original wording for that part and mention the limit in watch_outs.
+- Respond with a single JSON object only — no markdown fences.`;
+
+export async function answerInterviewQuestion(
+  context: InterviewPrepContext,
+  question: string,
+  revision?: InterviewAnswerRevision
+): Promise<InterviewQuestionAnswerResult> {
+  const priorAnswers = (context.priorAnswers ?? []).slice(0, 16).map((a) => ({
+    question: a.question ?? a.question_id,
+    answer: a.answer.slice(0, 600),
+    related_requirement: a.related_requirement ?? '',
+  }));
+
+  const userPrompt = JSON.stringify({
+    interviewer_question: question.slice(0, 2000),
+    revision_notes: revision?.notes.slice(0, 1500) || null,
+    current_draft: revision
+      ? {
+          talking_track: revision.previous.talking_track.slice(0, 4000),
+          framing: revision.previous.framing.slice(0, 1500),
+          evidence: revision.previous.evidence.slice(0, 6),
+          watch_outs: revision.previous.watch_outs?.slice(0, 1500) || null,
+        }
+      : null,
+    job: {
+      title: context.job.title,
+      company: context.job.company,
+      description: context.job.description.slice(0, 6000),
+    },
+    resume: context.resumeText.slice(0, 8000),
+    gap_analysis: context.gapAnalysis ? compactGapAnalysis(context.gapAnalysis) : null,
+    prior_answers: priorAnswers.length ? priorAnswers : null,
+    extra_context: context.extraContext?.trim().slice(0, 1500) || null,
+    output_schema: {
+      talking_track: 'string — first person spoken answer',
+      framing: 'string — coaching in "you"',
+      evidence: ['string — fact used from resume or Q&A'],
+      watch_outs: 'optional string — coaching in "you"',
+    },
+  });
+
+  const raw = await claudeText(
+    revision ? INTERVIEW_ANSWER_REVISE_SYSTEM : INTERVIEW_ANSWER_SYSTEM,
+    revision
+      ? `Revise this interview answer using only the candidate's notes. Keep it close to the current draft. Return JSON only.\n\n${userPrompt}`
+      : `Draft an answer to this interviewer question. Return JSON only.\n\n${userPrompt}`,
+    2500,
+    getInterviewModel()
+  );
+
+  const parsed = parseJsonResponse<InterviewQuestionAnswerResult>(raw);
+  const evidence = Array.isArray(parsed.evidence)
+    ? parsed.evidence.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).slice(0, 6)
+    : [];
+
+  return {
+    talking_track: (parsed.talking_track ?? '').trim(),
+    framing: directVoice(parsed.framing ?? '', context.resumeText),
+    evidence,
+    watch_outs: parsed.watch_outs
+      ? directVoice(parsed.watch_outs, context.resumeText)
+      : undefined,
+  };
 }

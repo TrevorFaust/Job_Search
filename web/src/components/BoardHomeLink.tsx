@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { getBoardHref } from '@/lib/board-state';
 
 type Props = {
@@ -11,7 +12,14 @@ type Props = {
 
 /** Back link to the job board, preserving filters when possible. */
 export function BoardHomeLink({ from, className, children }: Props) {
-  const href = from && from.startsWith('/') ? from : getBoardHref();
+  const staticHref = from && from.startsWith('/') ? from : '/';
+  const [href, setHref] = useState(staticHref);
+
+  useEffect(() => {
+    if (from && from.startsWith('/')) return;
+    setHref(getBoardHref());
+  }, [from]);
+
   return (
     <Link href={href} className={className}>
       {children}

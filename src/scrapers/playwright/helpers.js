@@ -1,4 +1,4 @@
-import { USER_AGENT, truncateDescription } from '../utils.js';
+import { USER_AGENT, truncateDescription, isJunkDescription, isJunkTitle } from '../utils.js';
 
 const JOB_DETAIL_SELECTORS = [
   '#jobdescSec',
@@ -42,13 +42,59 @@ export async function enrichShortDescriptions(page, jobs, { minLength = 120, max
   let fetched = 0;
 
   for (const job of jobs) {
-    if ((job.description?.length ?? 0) >= minLength || !job.url) continue;
+    if (!isJunkDescription(job, minLength) || !job.url) continue;
     if (fetched >= limit) break;
 
     const desc = await fetchJobDetailDescription(page, job.url);
     if (desc.length > (job.description?.length ?? 0)) {
       job.description = truncateDescription(desc);
     }
+    fetched++;
+    await page.waitForTimeout(250);
+  }
+
+  return jobs;
+}
+
+/**
+ * Visit detail pages to fill missing title/company/location/salary/postedAt/description.
+ * `fetchDetail` receives the Playwright page and job URL; return partial job fields.
+ */
+export async function enrichJobsFromDetailPages(
+  page,
+  jobs,
+  fetchDetail,
+  { maxFetch, needsEnrichment, overwriteFields = [] } = {}
+) {
+  const limit = maxFetch ?? (jobs.length > 200 ? 40 : 80);
+  const needs =
+    needsEnrichment ??
+    ((job) => !job.company || isJunkDescription(job, 120));
+  let fetched = 0;
+
+  for (const job of jobs) {
+    if (!job.url || !needs(job)) continue;
+    if (fetched >= limit) break;
+
+    const detail = await fetchDetail(page, job.url);
+    if (
+      detail.title &&
+      (isJunkTitle(job.title) || !job.title || job.title.length < detail.title.length)
+    ) {
+      job.title = detail.title;
+    }
+    if (detail.company && (!job.company || overwriteFields.includes('company'))) {
+      job.company = detail.company;
+    }
+    if (detail.location && (!job.location || job.location === 'United States')) {
+      job.location = detail.location;
+    }
+    if (detail.salary && !job.salary) job.salary = detail.salary;
+    if (detail.postedAt && !job.postedAt) job.postedAt = detail.postedAt;
+    if (detail.description?.length > (job.description?.length ?? 0)) {
+      job.description = truncateDescription(detail.description);
+    }
+
     fetched++;
     await page.waitForTimeout(250);
   }
@@ -155,7 +201,11 @@ export async function scrapeDiceSearch(
             null,
           location: meta.find((t) => /,|remote|hybrid/i.test(t)) ?? null,
           salary: el.querySelector('#salary-label')?.textContent?.trim() ?? null,
-          description: el.querySelector('p.line-clamp-2')?.textContent?.trim() ?? '',
+          description:
+            el.querySelector('p.line-clamp-2.h-10')?.textContent?.trim() ??
+            [...el.querySelectorAll('p.line-clamp-2')].find((p) => (p.textContent?.trim().length ?? 0) > 80)
+              ?.textContent?.trim() ??
+            '',
           posted: meta.find((t) => /today|yesterday|day|week|month/i.test(t)) ?? null,
         };
       })

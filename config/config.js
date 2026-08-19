@@ -29,6 +29,8 @@ export default {
     idealist: true,
     workatastartup: true,
     powertofly: true,
+    bdge: true,
+    'nfl-priority': true, // NFL team career pages — pinned + alert email per team
     // Blocked or needs more work: remote.co (HTTP2), wellfound (403), welcometothejungle
   },
 

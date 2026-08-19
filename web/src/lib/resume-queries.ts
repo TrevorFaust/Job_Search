@@ -1,4 +1,5 @@
 import { getDb } from './supabase';
+import { parseFitLevel, parseFitScore } from './fit-level';
 import { analyzeKeywords, type KeywordAnalysis } from './resume-keywords';
 import type { GapAnalysis, TailorAnswer, TailorQuestion } from './llm';
 import type { Job } from './queries';
@@ -33,6 +34,7 @@ export type TailoringSession = {
   extra_context: string;
   page_preference: 'one' | 'two';
   output_text: string | null;
+  cover_letter_text: string | null;
   error_message: string | null;
   created_at: string;
   updated_at: string;
@@ -151,6 +153,20 @@ async function getLatestSessionForManualJob(
   return data as TailoringSession | null;
 }
 
+export async function getLatestTailoringSessionForManualJob(
+  subscriberId: string,
+  manualJobId: string
+): Promise<TailoringSession | null> {
+  return getLatestSessionForManualJob(subscriberId, manualJobId);
+}
+
+export async function getLatestTailoringSessionForJob(
+  subscriberId: string,
+  jobId: number
+): Promise<TailoringSession | null> {
+  return getLatestSessionForScrapedJob(subscriberId, jobId);
+}
+
 export async function upsertResume(
   subscriberId: string,
   contentText: string,
@@ -223,13 +239,16 @@ export async function listManualJobs(subscriberId: string): Promise<ManualJobWit
 
   const { data: sessions, error: sessionError } = await getDb()
     .from('tailoring_sessions')
-    .select('id, manual_job_id, status, output_text, created_at')
+    .select('id, manual_job_id, status, output_text, gap_analysis, created_at')
     .eq('subscriber_id', subscriberId)
     .not('manual_job_id', 'is', null)
     .order('created_at', { ascending: false });
   if (sessionError) throw sessionError;
 
-  const latestByJob = new Map<string, { id: string; status: string; output_text: string | null }>();
+  const latestByJob = new Map<
+    string,
+    { id: string; status: string; output_text: string | null; gap_analysis: unknown }
+  >();
   for (const s of sessions ?? []) {
     const key = s.manual_job_id as string;
     if (!latestByJob.has(key)) {
@@ -237,6 +256,7 @@ export async function listManualJobs(subscriberId: string): Promise<ManualJobWit
         id: s.id,
         status: s.status,
         output_text: s.output_text,
+        gap_analysis: s.gap_analysis,
       });
     }
   }
@@ -248,6 +268,8 @@ export async function listManualJobs(subscriberId: string): Promise<ManualJobWit
       session_id: session?.id ?? null,
       session_status: session?.status ?? null,
       has_output: !!session?.output_text,
+      fit_level: parseFitLevel(session?.gap_analysis),
+      fit_score: parseFitScore(session?.gap_analysis),
     };
   });
 }
@@ -324,6 +346,7 @@ export async function updateSession(
       | 'extra_context'
       | 'page_preference'
       | 'output_text'
+      | 'cover_letter_text'
       | 'error_message'
     >
   >

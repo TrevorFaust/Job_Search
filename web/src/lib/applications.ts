@@ -1,6 +1,8 @@
 import { getDb } from './supabase';
 import { applyJobFiltersAsync, paginate, sortJobs, BOARD_MAX_JOBS, type JobFilters } from './filters';
 import { filterByCategories } from './categories';
+import { parseFitLevel, parseFitScore } from './fit-level';
+import { hydrateFitLevels } from './job-fit';
 import type { Job, JobView, PaginatedJobs, SortKey } from './queries';
 import { manualJobToBoardView } from './manual-jobs';
 import type { ManualJob } from './manual-jobs';
@@ -16,6 +18,7 @@ export type JobApplication = {
   stage: ApplicationStage;
   tailoring_session_id: string | null;
   notes: string;
+  interview_prep: Record<string, unknown>;
   applied_at: string;
   updated_at: string;
 };
@@ -34,14 +37,43 @@ export function normalizeApplicationStage(value: string | undefined): Applicatio
   return undefined;
 }
 
-export type AppliedJobExclusions = {
+export type JobBoardExclusions = {
   scrapedIds: Set<number>;
   manualIds: Set<string>;
 };
 
+export type AppliedJobExclusions = JobBoardExclusions;
+
+export function mergeJobBoardExclusions(...sets: JobBoardExclusions[]): JobBoardExclusions {
+  const scrapedIds = new Set<number>();
+  const manualIds = new Set<string>();
+  for (const set of sets) {
+    for (const id of set.scrapedIds) scrapedIds.add(id);
+    for (const id of set.manualIds) manualIds.add(id);
+  }
+  return { scrapedIds, manualIds };
+}
+
 export async function getAppliedJobExclusions(subscriberId: string): Promise<AppliedJobExclusions> {
   const { data, error } = await getDb()
     .from('job_applications')
+    .select('job_id, manual_job_id')
+    .eq('subscriber_id', subscriberId);
+
+  if (error) throw error;
+
+  const scrapedIds = new Set<number>();
+  const manualIds = new Set<string>();
+  for (const row of data ?? []) {
+    if (row.job_id != null) scrapedIds.add(row.job_id as number);
+    if (row.manual_job_id) manualIds.add(row.manual_job_id as string);
+  }
+  return { scrapedIds, manualIds };
+}
+
+export async function getDismissedJobExclusions(subscriberId: string): Promise<JobBoardExclusions> {
+  const { data, error } = await getDb()
+    .from('dismissed_jobs')
     .select('job_id, manual_job_id')
     .eq('subscriber_id', subscriberId);
 
@@ -95,7 +127,7 @@ export async function getAppliedJobs(
 
     let query = getDb()
       .from('job_applications')
-      .select('stage, applied_at, jobs(*), manual_jobs(*)')
+      .select('stage, applied_at, interview_prep, tailoring_sessions(gap_analysis), jobs(*), manual_jobs(*)')
       .eq('subscriber_id', subscriberId)
       .order('applied_at', { ascending: false });
 
@@ -106,12 +138,19 @@ export async function getAppliedJobs(
     if (!data?.length) break;
 
     for (const row of data as Record<string, unknown>[]) {
+      const interviewPrep = (row.interview_prep as Record<string, unknown>) ?? {};
+      const tailoringSession = row.tailoring_sessions as { gap_analysis?: unknown } | null;
+      const fitLevel = parseFitLevel(tailoringSession?.gap_analysis);
+      const fitScore = parseFitScore(tailoringSession?.gap_analysis);
       const manualJob = row.manual_jobs as ManualJob | null;
       if (manualJob) {
         jobs.push({
           ...manualJobToBoardView(manualJob),
           application_stage: row.stage as ApplicationStage,
           applied_at: row.applied_at as string,
+          interview_prep: interviewPrep,
+          fit_level: fitLevel,
+          fit_score: fitScore,
         });
         continue;
       }
@@ -122,13 +161,18 @@ export async function getAppliedJobs(
         ...job,
         application_stage: row.stage as ApplicationStage,
         applied_at: row.applied_at as string,
+        interview_prep: interviewPrep,
+        fit_level: fitLevel,
+        fit_score: fitScore,
       });
     }
 
     if (data.length < batchSize) break;
   }
 
-  let filtered = filterBySearch(jobs, q);
+  const withFitLevels = await hydrateFitLevels(subscriberId, jobs);
+
+  let filtered = filterBySearch(withFitLevels, q);
   if (filters) filtered = await applyJobFiltersAsync(filtered, filters);
   if (filters?.categories.length) filtered = filterByCategories(filtered, filters.categories);
   filtered = sortJobs(filtered, sort);

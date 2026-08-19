@@ -6,6 +6,10 @@ import { redirect } from 'next/navigation';
 import { getDb } from './supabase';
 import { getSubscriberByToken } from './queries';
 import {
+  getLatestTailoringSessionForJob,
+  getLatestTailoringSessionForManualJob,
+} from './resume-queries';
+import {
   APPLICATION_STAGES,
   type ApplicationStage,
   normalizeApplicationStage,
@@ -80,8 +84,15 @@ export async function markJobApplied(formData: FormData) {
   const { jobId, manualJobId } = parseApplicationTarget(formData);
 
   const sessionId = formData.get('sessionId');
-  const tailoringSessionId =
+  let tailoringSessionId =
     typeof sessionId === 'string' && sessionId.trim() ? sessionId.trim() : null;
+
+  if (!tailoringSessionId) {
+    const latestSession = manualJobId
+      ? await getLatestTailoringSessionForManualJob(sub.id, manualJobId)
+      : await getLatestTailoringSessionForJob(sub.id, jobId!);
+    if (latestSession) tailoringSessionId = latestSession.id;
+  }
 
   const now = new Date().toISOString();
   await saveJobApplication({
@@ -128,6 +139,51 @@ export async function updateApplicationStage(formData: FormData) {
   revalidatePath('/applications');
   if (jobId) revalidatePath(`/jobs/${jobId}`);
   if (manualJobId) revalidatePath(`/tailor/manual/${manualJobId}`);
+}
+
+export async function dismissJobFromBoard(formData: FormData) {
+  const sub = await requireSubscriber();
+  const { jobId, manualJobId } = parseApplicationTarget(formData);
+
+  const db = getDb();
+  let lookup = db.from('dismissed_jobs').select('id').eq('subscriber_id', sub.id);
+  lookup = manualJobId ? lookup.eq('manual_job_id', manualJobId) : lookup.eq('job_id', jobId!);
+
+  const { data: existing, error: lookupError } = await lookup.maybeSingle();
+  if (lookupError) throw lookupError;
+
+  const now = new Date().toISOString();
+  if (existing) {
+    const { error } = await db
+      .from('dismissed_jobs')
+      .update({ dismissed_at: now })
+      .eq('id', existing.id);
+    if (error) throw error;
+  } else {
+    const { error } = await db.from('dismissed_jobs').insert({
+      subscriber_id: sub.id,
+      job_id: jobId,
+      manual_job_id: manualJobId,
+      dismissed_at: now,
+    });
+    if (error) throw error;
+  }
+
+  revalidatePath('/');
+  revalidatePath('/applications');
+  if (jobId) {
+    revalidatePath(`/jobs/${jobId}`);
+    revalidatePath(`/tailor/${jobId}`);
+  }
+  if (manualJobId) {
+    revalidatePath(`/jobs/manual/${manualJobId}`);
+    revalidatePath(`/tailor/manual/${manualJobId}`);
+  }
+
+  const redirectTo = formData.get('redirectTo');
+  if (typeof redirectTo === 'string' && redirectTo.startsWith('/')) {
+    redirect(redirectTo);
+  }
 }
 
 export async function removeJobApplication(formData: FormData) {

@@ -1,14 +1,13 @@
 'use client';
 
 import { useEffect } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { clearBoardHref, getBoardHref, saveBoardHref } from '@/lib/board-state';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { clearBoardHref, saveBoardHref } from '@/lib/board-state';
 
-/** Keeps the last board URL in sessionStorage and restores it when returning to `/`. */
+/** Keeps the last board URL in sessionStorage for BoardHomeLink back navigation. */
 export function PersistBoardFilters() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const router = useRouter();
 
   useEffect(() => {
     if (pathname !== '/') return;
@@ -19,11 +18,9 @@ export function PersistBoardFilters() {
       return;
     }
 
-    const saved = getBoardHref();
-    if (saved !== '/') {
-      router.replace(saved);
-    }
-  }, [pathname, searchParams, router]);
+    // Bare `/` is the explicit "all jobs" view — don't restore a saved tab.
+    clearBoardHref();
+  }, [pathname, searchParams]);
 
   return null;
 }

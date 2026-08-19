@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import config from '../config/config.js';
-import { isTooOld, truncate } from './scrapers/utils.js';
+import { isTooOld, truncate, isPublishableJob } from './scrapers/utils.js';
 import { profileMatchesJob, isDueForDigest } from '../lib/matching.js';
 import { parseSalary, passesSalaryFilter } from '../lib/salary.js';
 import {
@@ -14,8 +14,11 @@ import {
   markMatchesEmailed,
   updateProfileLastSent,
   ensureDefaultSubscriber,
+  getUnnotifiedSpecialJobs,
+  markSpecialJobsNotified,
 } from './db/supabase.js';
 import { sendDigest } from './email/digest.js';
+import { sendPriorityAlert } from './email/priority-alert.js';
 
 import * as remoteok from './scrapers/remoteok.js';
 import * as remotive from './scrapers/remotive.js';
@@ -29,6 +32,13 @@ import * as authenticjobs from './scrapers/authenticjobs.js';
 import * as idealist from './scrapers/idealist.js';
 import * as workatastartup from './scrapers/workatastartup.js';
 import * as powertofly from './scrapers/powertofly.js';
+import * as bdge from './scrapers/bdge.js';
+import * as nflPriority from './scrapers/nfl-priority.js';
+
+const PRIORITY_ALERT_META = {
+  [bdge.name]: { alertLabel: bdge.alertLabel, alertUrl: bdge.alertUrl },
+  ...nflPriority.alertMeta,
+};
 
 const ALL_SCRAPERS = [
   remoteok,
@@ -43,6 +53,8 @@ const ALL_SCRAPERS = [
   idealist,
   workatastartup,
   powertofly,
+  bdge,
+  nflPriority,
 ];
 
 const DRY_RUN = process.env.DRY_RUN === '1';
@@ -77,10 +89,19 @@ async function scrapeAll(maxJobAgeDays) {
   for (const scraper of scrapers) {
     try {
       const jobs = await scraper.scrape({ mode: SCRAPE_MODE });
-      const fresh = jobs.filter((j) => !isTooOld(j, maxJobAgeDays));
+      const publishable = jobs.filter(isPublishableJob);
+      const fresh = publishable.filter((j) => !isTooOld(j, maxJobAgeDays));
       const dropped = jobs.length - fresh.length;
-      const suffix = dropped ? `, ${dropped} older than ${maxJobAgeDays}d` : '';
-      console.log(`  [${scraper.name}] ${jobs.length} scraped → ${fresh.length} kept${suffix}`);
+      const junk = jobs.length - publishable.length;
+      const suffix = [
+        dropped ? `${dropped} older than ${maxJobAgeDays}d` : '',
+        junk ? `${junk} incomplete` : '',
+      ]
+        .filter(Boolean)
+        .join(', ');
+      console.log(
+        `  [${scraper.name}] ${jobs.length} scraped → ${fresh.length} kept${suffix ? `, ${suffix}` : ''}`
+      );
       allJobs.push(...fresh);
     } catch (err) {
       console.error(`  [${scraper.name}] FAILED: ${err.message}`);
@@ -124,6 +145,36 @@ async function main() {
 
   const idMap = await saveJobs(scraped);
   console.log(`Saved/updated ${idMap.size} jobs in database`);
+
+  const unnotifiedSpecial = await getUnnotifiedSpecialJobs();
+  if (unnotifiedSpecial.length) {
+    const alertTo = process.env.EMAIL_TO;
+    if (alertTo) {
+      const bySource = new Map();
+      for (const job of unnotifiedSpecial) {
+        if (!bySource.has(job.source)) bySource.set(job.source, []);
+        bySource.get(job.source).push(job);
+      }
+
+      for (const [source, jobs] of bySource) {
+        const meta = PRIORITY_ALERT_META[source];
+        await sendPriorityAlert({
+          to: alertTo,
+          label: meta?.alertLabel ?? jobs[0].company ?? source,
+          url: meta?.alertUrl ?? jobs[0].url,
+          roleCount: jobs.length,
+        });
+        await markSpecialJobsNotified(jobs.map((j) => j.id));
+        console.log(
+          `Priority alert sent to ${alertTo} for ${source} (${jobs.length} new listing(s))`
+        );
+      }
+    } else {
+      console.log(
+        `${unnotifiedSpecial.length} new priority listing(s) — EMAIL_TO not set, skipping alert`
+      );
+    }
+  }
 
   await pruneBoardIfOverCapacity();
 

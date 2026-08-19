@@ -1,24 +1,14 @@
 import { cookies } from 'next/headers';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { getAllJobs, getSubscriberByToken, normalizeSortKey } from '@/lib/queries';
-import {
-  getAppliedJobExclusions,
-  getAppliedJobs,
-  normalizeApplicationStage,
-} from '@/lib/applications';
-import { parseJobFilters } from '@/lib/filters';
-import { ALL_CATEGORY_IDS } from '@/lib/categories';
-import { JobBoard } from '@/components/JobBoard';
+import { Suspense } from 'react';
+import { getSubscriberByToken } from '@/lib/queries';
+import { normalizeBoardView } from '@/lib/board-data';
+import { BoardPageClient } from '@/components/BoardPageClient';
+import { BoardSkeleton } from '@/components/BoardSkeleton';
 import { signOut } from '@/lib/actions';
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
-
-function normalizeView(value: string | undefined): 'all' | 'preferred' | 'applied' {
-  if (value === 'applied') return 'applied';
-  if (value === 'preferred') return 'preferred';
-  return 'all';
-}
 
 export default async function HomePage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
@@ -27,32 +17,8 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
   const subscriber = token ? await getSubscriberByToken(token) : null;
   const signedIn = !!subscriber;
 
-  const view = normalizeView(typeof params.view === 'string' ? params.view : undefined);
-  const stage = normalizeApplicationStage(typeof params.stage === 'string' ? params.stage : undefined);
-  const sort = normalizeSortKey(typeof params.sort === 'string' ? params.sort : 'date');
-  const q = typeof params.q === 'string' ? params.q : '';
-  const page = typeof params.page === 'string' ? Math.max(1, Number(params.page) || 1) : 1;
-  const filters = parseJobFilters(params);
-  if (view === 'preferred' && !filters.categories.length) {
-    filters.categories = ALL_CATEGORY_IDS;
-  }
-
+  const view = normalizeBoardView(typeof params.view === 'string' ? params.view : undefined);
   if (view === 'applied' && !signedIn) redirect('/sign-in');
-
-  const appliedExclusions = signedIn ? await getAppliedJobExclusions(subscriber!.id) : undefined;
-
-  const result =
-    view === 'applied'
-      ? await getAppliedJobs(subscriber!.id, sort, page, q, filters, stage)
-      : await getAllJobs(
-          sort,
-          page,
-          q,
-          filters,
-          appliedExclusions?.scrapedIds,
-          subscriber?.id,
-          appliedExclusions?.manualIds
-        );
 
   return (
     <main className="mx-auto w-full max-w-[1400px] px-8 py-10">
@@ -106,18 +72,9 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
           )}
         </div>
       </header>
-      <JobBoard
-        jobs={result.jobs}
-        total={result.total}
-        page={result.page}
-        totalPages={result.totalPages}
-        view={view}
-        stage={stage}
-        sort={sort}
-        q={q}
-        filters={filters}
-        signedIn={signedIn}
-      />
+      <Suspense fallback={<BoardSkeleton />}>
+        <BoardPageClient />
+      </Suspense>
     </main>
   );
 }

@@ -3,6 +3,14 @@ import { geocodeUS, geocodeJobLocationLocal, milesBetween } from './geo';
 import { parseCategoryIds } from './categories';
 
 export function sortJobs<T extends Job>(jobs: T[], sort: SortKey): T[] {
+  const special = jobs.filter((j) => j.is_special);
+  const regular = jobs.filter((j) => !j.is_special);
+  const sortedSpecial = sortJobsByKey(special, sort);
+  const sortedRegular = sortJobsByKey(regular, sort);
+  return [...sortedSpecial, ...sortedRegular];
+}
+
+function sortJobsByKey<T extends Job>(jobs: T[], sort: SortKey): T[] {
   const copy = [...jobs];
   switch (sort) {
     case 'salary_high':
@@ -246,10 +254,11 @@ export function buildBoardHref(
   filters: JobFilters,
   opts: { view?: string; stage?: string; sort?: string; q?: string; page?: number } = {}
 ): string {
+  const view = opts.view ?? 'all';
   const params = buildFilterParams(
     {
-      view: opts.view && opts.view !== 'all' ? opts.view : undefined,
-      stage: opts.view === 'applied' && opts.stage ? opts.stage : undefined,
+      view,
+      stage: view === 'applied' && opts.stage ? opts.stage : undefined,
       sort: opts.sort && opts.sort !== 'date' ? opts.sort : undefined,
       q: opts.q || undefined,
     },

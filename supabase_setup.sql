@@ -25,6 +25,12 @@ alter table public.jobs add column if not exists salary_max_annual integer;
 alter table public.jobs add column if not exists salary_raw text;
 alter table public.jobs add column if not exists expires_at timestamptz;
 alter table public.jobs add column if not exists status text not null default 'active';
+alter table public.jobs add column if not exists is_special boolean not null default false;
+alter table public.jobs add column if not exists special_notified_at timestamptz;
+
+create index if not exists jobs_special_active_idx
+  on public.jobs (is_special, status)
+  where is_special = true and status = 'active';
 
 create table if not exists public.subscribers (
   id uuid primary key default gen_random_uuid(),
@@ -98,6 +104,7 @@ create table if not exists public.tailoring_sessions (
   page_preference text not null default 'one'
     check (page_preference in ('one', 'two')),
   output_text text,
+  cover_letter_text text,
   error_message text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -162,6 +169,7 @@ create table if not exists public.job_applications (
     check (stage in ('applied', 'interviewing', 'rejected', 'offered')),
   tailoring_session_id uuid references public.tailoring_sessions(id) on delete set null,
   notes text not null default '',
+  interview_prep jsonb not null default '{}'::jsonb,
   applied_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   check (
@@ -193,3 +201,29 @@ create index if not exists job_applications_subscriber_stage_idx
   on public.job_applications (subscriber_id, stage);
 
 alter table public.job_applications enable row level security;
+
+-- Jobs a subscriber has hidden from their board (e.g. listing no longer available).
+create table if not exists public.dismissed_jobs (
+  id uuid primary key default gen_random_uuid(),
+  subscriber_id uuid not null references public.subscribers(id) on delete cascade,
+  job_id bigint references public.jobs(id) on delete cascade,
+  manual_job_id uuid references public.manual_jobs(id) on delete cascade,
+  dismissed_at timestamptz not null default now(),
+  check (
+    (job_id is not null and manual_job_id is null) or
+    (job_id is null and manual_job_id is not null)
+  )
+);
+
+create unique index if not exists dismissed_jobs_subscriber_scraped_job_idx
+  on public.dismissed_jobs (subscriber_id, job_id)
+  where job_id is not null;
+
+create unique index if not exists dismissed_jobs_subscriber_manual_job_idx
+  on public.dismissed_jobs (subscriber_id, manual_job_id)
+  where manual_job_id is not null;
+
+create index if not exists dismissed_jobs_subscriber_idx
+  on public.dismissed_jobs (subscriber_id, dismissed_at desc);
+
+alter table public.dismissed_jobs enable row level security;

@@ -1,59 +1,52 @@
 import { cookies } from 'next/headers';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { JobDescription } from '@/components/JobDescription';
 import { BoardHomeLink } from '@/components/BoardHomeLink';
 import { InterviewPrepPanel } from '@/components/InterviewPrepPanel';
 import { MarkAppliedButton } from '@/components/MarkAppliedButton';
 import { ApplicationStageSelect } from '@/components/ApplicationStageSelect';
 import { formatPostedDate } from '@/lib/filters';
-import { getApplicationForJob } from '@/lib/applications';
+import { getApplicationForManualJob } from '@/lib/applications';
 import { getInterviewPrepState } from '@/lib/interview-actions';
 import { getSubscriberByToken } from '@/lib/queries';
-import { formatAnnualSalary } from '@/lib/salary';
-import { getJobById, getLatestTailoringSessionForJob, getTailoringSession } from '@/lib/resume-queries';
-import { prioritySourceMeta } from '@/lib/priority-jobs';
+import { getManualJobById, getLatestTailoringSessionForManualJob, getTailoringSession } from '@/lib/resume-queries';
 import { RemoveApplicationButton } from '@/components/RemoveApplicationButton';
 import { DismissJobButton } from '@/components/DismissJobButton';
 
 type Params = Promise<{ jobId: string }>;
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-export default async function JobDetailPage({
+export default async function ManualJobDetailPage({
   params,
   searchParams,
 }: {
   params: Params;
   searchParams: SearchParams;
 }) {
-  const { jobId: jobIdRaw } = await params;
+  const { jobId } = await params;
   const query = await searchParams;
   const from = typeof query.from === 'string' ? query.from : undefined;
-  const jobId = Number(jobIdRaw);
-  if (!Number.isFinite(jobId)) notFound();
-
-  const job = await getJobById(jobId);
-  if (!job || job.status !== 'active') notFound();
 
   const jar = await cookies();
   const token = jar.get('jh_token')?.value;
-  const subscriber = token ? await getSubscriberByToken(token) : null;
-  const application =
-    subscriber ? await getApplicationForJob(subscriber.id, jobId) : null;
-  const session = application?.tailoring_session_id && subscriber
+  if (!token) redirect('/sign-in');
+
+  const subscriber = await getSubscriberByToken(token);
+  if (!subscriber) redirect('/sign-in');
+
+  const job = await getManualJobById(jobId, subscriber.id);
+  if (!job) notFound();
+
+  const application = await getApplicationForManualJob(subscriber.id, jobId);
+  const session = application?.tailoring_session_id
     ? await getTailoringSession(application.tailoring_session_id, subscriber.id)
-    : subscriber
-      ? await getLatestTailoringSessionForJob(subscriber.id, jobId)
-      : null;
+    : await getLatestTailoringSessionForManualJob(subscriber.id, jobId);
   const hasDrafts = !!(session?.output_text || session?.cover_letter_text);
   const interviewState =
-    subscriber && application?.stage === 'interviewing'
-      ? await getInterviewPrepState(jobId)
+    application?.stage === 'interviewing'
+      ? await getInterviewPrepState(undefined, jobId)
       : { prep: null, answers: [] };
-
-  const salary =
-    formatAnnualSalary(job.salary_min_annual, job.salary_max_annual) ?? job.salary ?? null;
-  const priorityMeta = job.is_special ? prioritySourceMeta(job.source, job.company) : null;
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
@@ -62,17 +55,7 @@ export default async function JobDetailPage({
       </BoardHomeLink>
 
       <header className="mt-6 rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
-        {job.is_special && priorityMeta && (
-          <div className="mb-4 rounded-lg border border-amber-400/50 bg-amber-400/10 px-4 py-3">
-            <p className="text-xs font-bold uppercase tracking-wider text-amber-300">
-              Priority opportunity
-            </p>
-            <p className="mt-1 text-sm text-amber-100/90">
-              This {priorityMeta.label} role is watched daily and pinned to the top of your job board.
-            </p>
-          </div>
-        )}
-        <p className="text-xs uppercase tracking-wide text-amber-400/80">{job.source}</p>
+        <p className="text-xs uppercase tracking-wide text-amber-400/80">Manual application</p>
         <h1 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold text-zinc-50">
           {job.title}
         </h1>
@@ -82,46 +65,55 @@ export default async function JobDetailPage({
             <dt className="inline text-zinc-600">Location </dt>
             <dd className="inline text-zinc-400">{job.location ?? 'Not listed'}</dd>
           </div>
-          {salary && (
+          {job.salary && (
             <div>
               <dt className="inline text-zinc-600">Salary </dt>
-              <dd className="inline font-mono text-emerald-400">{salary}</dd>
+              <dd className="inline font-mono text-emerald-400">{job.salary}</dd>
             </div>
           )}
           <div>
-            <dt className="inline text-zinc-600">Posted </dt>
+            <dt className="inline text-zinc-600">Added </dt>
             <dd className="inline text-zinc-400">
-              {formatPostedDate(job.posted_at, job.created_at)}
+              {formatPostedDate(null, job.created_at)}
             </dd>
           </div>
+          {application?.applied_at && (
+            <div>
+              <dt className="inline text-zinc-600">Applied </dt>
+              <dd className="inline text-zinc-400">
+                {formatPostedDate(application.applied_at, application.applied_at)}
+              </dd>
+            </div>
+          )}
         </dl>
 
         <div className="mt-6 flex flex-wrap items-center gap-3">
-          {subscriber && !application && (
+          {!application && (
             <>
               <Link
-                href={`/tailor/${job.id}`}
+                href={`/tailor/manual/${job.id}`}
                 className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-amber-300"
               >
                 Tailor resume
               </Link>
               <MarkAppliedButton
-                jobId={job.id}
+                manualJobId={job.id}
+                sessionId={session?.id}
                 label="I've applied"
                 className="rounded-lg border border-zinc-600 px-4 py-2 text-sm text-zinc-300 hover:border-amber-500/50 hover:text-amber-300"
               />
               <DismissJobButton
-                jobId={job.id}
+                manualJobId={job.id}
                 redirectTo="/"
                 className="text-sm text-zinc-500 hover:text-zinc-300"
               />
             </>
           )}
-          {subscriber && application && (
+          {application && (
             <div className="flex flex-wrap items-center gap-3">
-              <ApplicationStageSelect jobId={job.id} stage={application.stage} />
+              <ApplicationStageSelect manualJobId={job.id} stage={application.stage} />
               <Link
-                href={`/tailor/${job.id}`}
+                href={`/tailor/manual/${job.id}`}
                 className="rounded-lg border border-zinc-600 px-4 py-2 text-sm text-zinc-300 hover:border-amber-500/50 hover:text-amber-300"
               >
                 {hasDrafts ? 'View resume & cover letter' : 'Tailor resume'}
@@ -132,17 +124,19 @@ export default async function JobDetailPage({
               >
                 View in Applied tab
               </Link>
-              <RemoveApplicationButton jobId={job.id} className="text-sm text-zinc-500 hover:text-zinc-300" />
+              <RemoveApplicationButton manualJobId={job.id} className="text-sm text-zinc-500 hover:text-zinc-300" />
             </div>
           )}
-          <a
-            href={job.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-lg border border-zinc-600 px-4 py-2 text-sm text-zinc-300 hover:border-amber-500/50 hover:text-amber-300"
-          >
-            Apply on original site ↗
-          </a>
+          {job.url && (
+            <a
+              href={job.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg border border-zinc-600 px-4 py-2 text-sm text-zinc-300 hover:border-amber-500/50 hover:text-amber-300"
+            >
+              Open original listing ↗
+            </a>
+          )}
         </div>
       </header>
 
@@ -153,16 +147,13 @@ export default async function JobDetailPage({
         {job.description ? (
           <JobDescription description={job.description} />
         ) : (
-          <p className="text-sm text-zinc-500">No description stored for this listing.</p>
+          <p className="text-sm text-zinc-500">No description stored for this job.</p>
         )}
-        <p className="mt-3 text-xs text-zinc-600">
-          Older listings may look compressed until the next scrape refreshes full descriptions.
-        </p>
       </section>
 
-      {subscriber && application?.stage === 'interviewing' && (
+      {application?.stage === 'interviewing' && (
         <InterviewPrepPanel
-          jobId={job.id}
+          manualJobId={job.id}
           initialPrep={interviewState.prep}
           initialAnswers={interviewState.answers}
         />

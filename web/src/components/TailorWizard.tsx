@@ -1,21 +1,27 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import type { TailorJobView } from '@/lib/manual-jobs';
+import type { ApplicationStage } from '@/lib/applications';
 import type { TailoringSession } from '@/lib/resume-queries';
 import type { TailorAnswer } from '@/lib/llm';
 import {
+  generateCoverLetterDraft,
   generateTailoredDraft,
   runGapAnalysis,
   saveTailorAnswers,
 } from '@/lib/resume-actions';
 import { MarkAppliedButton } from './MarkAppliedButton';
+import { ApplicationStageSelect } from './ApplicationStageSelect';
+import { DismissJobButton } from './DismissJobButton';
 
 type Props = {
   job: TailorJobView;
   session: TailoringSession;
   initialReusedCount?: number;
   backHref?: string;
+  applicationStage?: ApplicationStage;
 };
 
 function KeywordPills({ label, terms, tone }: { label: string; terms: string[]; tone: string }) {
@@ -37,7 +43,7 @@ function KeywordPills({ label, terms, tone }: { label: string; terms: string[]; 
   );
 }
 
-export function TailorWizard({ job, session: initialSession, initialReusedCount = 0, backHref = '/' }: Props) {
+export function TailorWizard({ job, session: initialSession, initialReusedCount = 0, backHref = '/', applicationStage }: Props) {
   const [session, setSession] = useState(initialSession);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -48,6 +54,8 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
     return map;
   });
   const [output, setOutput] = useState(initialSession.output_text ?? '');
+  const [coverLetterOutput, setCoverLetterOutput] = useState(initialSession.cover_letter_text ?? '');
+  const [draftView, setDraftView] = useState<'resume' | 'cover-letter'>('resume');
   const [extraContext, setExtraContext] = useState(initialSession.extra_context ?? '');
   const [pagePreference, setPagePreference] = useState<'one' | 'two'>(
     initialSession.page_preference ?? 'one'
@@ -104,15 +112,30 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
         await saveTailorAnswers(session.id, payload, extraContext);
         const result = await generateTailoredDraft(session.id, extraContext, pagePreference);
         setOutput(result.output_text);
+        setCoverLetterOutput(result.cover_letter_text);
         setSession((s) => ({
           ...s,
           status: 'done',
           output_text: result.output_text,
+          cover_letter_text: result.cover_letter_text,
           extra_context: extraContext.trim(),
           page_preference: pagePreference,
         }));
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Generation failed');
+      }
+    });
+  }
+
+  function handleGenerateCoverLetter() {
+    setError(null);
+    startTransition(async () => {
+      try {
+        const result = await generateCoverLetterDraft(session.id, extraContext);
+        setCoverLetterOutput(result.cover_letter_text);
+        setSession((s) => ({ ...s, cover_letter_text: result.cover_letter_text }));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Cover letter generation failed');
       }
     });
   }
@@ -130,8 +153,27 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
           {job.company ?? 'Unknown company'} · {job.location ?? 'Location n/a'}
         </p>
         <p className="mt-3 text-xs text-zinc-600">
-          Draft only — review before submitting. We always produce a resume; weak-fit roles get a lighter touch (especially your Profile section).
+          Draft only — review before submitting. We produce a tailored resume and cover letter using the same answers and context.
         </p>
+        {!applicationStage && (
+          <div className="mt-4 border-t border-zinc-800 pt-4">
+            {job.isManual ? (
+              <DismissJobButton
+                manualJobId={job.id}
+                redirectTo="/applications"
+                label="Listing unavailable — remove job"
+                className="text-sm text-zinc-500 hover:text-zinc-300"
+              />
+            ) : (
+              <DismissJobButton
+                jobId={Number(job.id)}
+                redirectTo={backHref}
+                label="Listing unavailable — remove from board"
+                className="text-sm text-zinc-500 hover:text-zinc-300"
+              />
+            )}
+          </div>
+        )}
       </header>
 
       {step === 'keywords' && (
@@ -165,6 +207,7 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
                 Fit:{' '}
                 <span className="text-amber-300">
                   {gap.fit_level.replace('_', ' ')}
+                  {gap.fit_score != null ? ` · ${gap.fit_score.toFixed(1)}/10` : ''}
                 </span>
               </p>
             )}
@@ -280,7 +323,7 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
               disabled={pending}
               className="rounded-lg bg-amber-400 px-5 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-amber-300 disabled:opacity-50"
             >
-              {pending ? 'Generating draft…' : 'Generate tailored resume'}
+              {pending ? 'Generating drafts…' : 'Generate resume & cover letter'}
             </button>
           </section>
         </>
@@ -289,34 +332,98 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
       {step === 'done' && output && (
         <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold text-zinc-100">Your draft</h2>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => navigator.clipboard.writeText(output)}
-                className="rounded-lg border border-zinc-600 px-3 py-1.5 text-sm text-zinc-300 hover:border-amber-500/50"
-              >
-                Copy
-              </button>
-              <a
-                href={`/api/tailor/${session.id}/download?format=docx`}
-                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500"
-              >
-                Download DOCX
-              </a>
-              <a
-                href={`/api/tailor/${session.id}/download?format=pdf`}
-                className="rounded-lg border border-emerald-700 bg-emerald-950/40 px-3 py-1.5 text-sm font-medium text-emerald-200 hover:bg-emerald-900/50"
-              >
-                Download PDF
-              </a>
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-semibold text-zinc-100">Your drafts</h2>
+              <div className="flex rounded-lg border border-zinc-700 bg-zinc-950 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setDraftView('resume')}
+                  className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                    draftView === 'resume'
+                      ? 'bg-amber-400 text-zinc-950'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  Resume
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDraftView('cover-letter')}
+                  className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                    draftView === 'cover-letter'
+                      ? 'bg-amber-400 text-zinc-950'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  Cover letter
+                </button>
+              </div>
             </div>
+            {(draftView === 'resume' || coverLetterOutput) && (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigator.clipboard.writeText(
+                      draftView === 'resume' ? output : coverLetterOutput
+                    )
+                  }
+                  className="rounded-lg border border-zinc-600 px-3 py-1.5 text-sm text-zinc-300 hover:border-amber-500/50"
+                >
+                  Copy
+                </button>
+                <a
+                  href={`/api/tailor/${session.id}/download?format=docx&doc=${draftView === 'resume' ? 'resume' : 'cover-letter'}`}
+                  className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500"
+                >
+                  Download DOCX
+                </a>
+                <a
+                  href={`/api/tailor/${session.id}/download?format=pdf&doc=${draftView === 'resume' ? 'resume' : 'cover-letter'}`}
+                  className="rounded-lg border border-emerald-700 bg-emerald-950/40 px-3 py-1.5 text-sm font-medium text-emerald-200 hover:bg-emerald-900/50"
+                >
+                  Download PDF
+                </a>
+              </div>
+            )}
           </div>
           <pre className="max-h-[32rem] overflow-auto whitespace-pre-wrap rounded-lg border border-zinc-800 bg-zinc-950 p-4 font-mono text-sm leading-relaxed text-zinc-300">
-            {output}
+            {draftView === 'resume' ? (
+              output
+            ) : coverLetterOutput ? (
+              coverLetterOutput
+            ) : (
+              <span className="text-zinc-500">
+                No cover letter yet for this session.
+              </span>
+            )}
           </pre>
+          {draftView === 'cover-letter' && !coverLetterOutput && (
+            <button
+              type="button"
+              onClick={handleGenerateCoverLetter}
+              disabled={pending}
+              className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-amber-300 disabled:opacity-50"
+            >
+              {pending ? 'Generating…' : 'Generate cover letter'}
+            </button>
+          )}
           <div className="flex flex-wrap items-center gap-3 border-t border-zinc-800 pt-4">
-            {job.isManual ? (
+            {applicationStage ? (
+              <>
+                <ApplicationStageSelect
+                  jobId={job.isManual ? undefined : Number(job.id)}
+                  manualJobId={job.isManual ? job.id : undefined}
+                  stage={applicationStage}
+                />
+                <Link
+                  href="/?view=applied"
+                  className="text-sm text-amber-400 hover:underline"
+                >
+                  View in Applied tab
+                </Link>
+              </>
+            ) : job.isManual ? (
               <MarkAppliedButton
                 manualJobId={job.id}
                 sessionId={session.id}
@@ -345,7 +452,9 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
             )}
           </div>
           <p className="text-xs text-zinc-600">
-            Copy plain accomplishment lines into your template (no bullet prefixes). DOCX and PDF downloads exclude Keyword Alignment notes.
+            {draftView === 'resume'
+              ? 'Copy plain accomplishment lines into your template (no bullet prefixes). DOCX and PDF downloads exclude Keyword Alignment notes.'
+              : 'Review before submitting. The cover letter uses the same answers and context as your resume draft.'}
           </p>
         </section>
       )}

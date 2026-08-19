@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { redirect, notFound } from 'next/navigation';
 import { BoardHomeLink } from '@/components/BoardHomeLink';
 import { TailorWizard } from '@/components/TailorWizard';
+import { getApplicationForJob } from '@/lib/applications';
 import { getSubscriberByToken } from '@/lib/queries';
 import { getJobById } from '@/lib/resume-queries';
 import { prepareTailorSession } from '@/lib/tailor-page';
@@ -49,16 +50,20 @@ export default async function TailorPage({ params }: { params: Params }) {
   const scraped = await getJobById(jobId);
   if (!scraped) notFound();
 
+  const application = await getApplicationForJob(subscriber.id, jobId);
+  const backHref = application ? `/jobs/${jobId}` : '/';
+
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
-      <BoardHomeLink className="text-sm text-zinc-500 hover:text-amber-300">
-        ← Back to job board
+      <BoardHomeLink from={backHref} className="text-sm text-zinc-500 hover:text-amber-300">
+        {application ? '← Back to job' : '← Back to job board'}
       </BoardHomeLink>
       <div className="mt-6">
         <TailorWizard
           job={scrapedJobToView(scraped)}
           session={prepared.session!}
           initialReusedCount={prepared.initialReusedCount}
+          backHref={backHref}
         />
       </div>
     </main>

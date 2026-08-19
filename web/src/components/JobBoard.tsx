@@ -10,11 +10,21 @@ import {
   type ApplicationStage,
 } from '@/lib/applications';
 import type { JobView, SortKey } from '@/lib/queries';
-import { removeJobApplication } from '@/lib/application-actions';
+import { RemoveApplicationButton } from './RemoveApplicationButton';
+import { DismissJobButton } from './DismissJobButton';
 import { ApplicationStageSelect } from './ApplicationStageSelect';
 import { FilterSidebar } from './FilterSidebar';
+import { FitLevelBadge } from './FitLevelBadge';
+import {
+  InterviewPrepExpanded,
+  InterviewPrepProvider,
+  InterviewPrepTrigger,
+} from './InterviewPrepPanel';
 import { MarkAppliedButton } from './MarkAppliedButton';
 import { Pagination } from './Pagination';
+import type { StoredInterviewPrep } from '@/lib/interview-actions';
+import { priorityBannerText, prioritySourceMeta } from '@/lib/priority-jobs';
+import Link from 'next/link';
 import { Suspense } from 'react';
 import { PersistBoardFilters } from './PersistBoardFilters';
 
@@ -77,6 +87,15 @@ function salaryDisplay(job: JobView) {
   return annual ?? job.salary ?? '—';
 }
 
+function parseStoredInterviewPrep(value: unknown): StoredInterviewPrep | null {
+  if (!value || typeof value !== 'object') return null;
+  const v = value as Record<string, unknown>;
+  if (typeof v.overview !== 'string' || !Array.isArray(v.questions) || typeof v.generated_at !== 'string') {
+    return null;
+  }
+  return value as StoredInterviewPrep;
+}
+
 export function JobBoard({
   jobs,
   total,
@@ -109,10 +128,10 @@ export function JobBoard({
 
   const boardHref = hrefFor();
   const jobHref = (job: JobView) => {
-    if (job.isManual && job.manual_job_id) {
-      return `/tailor/manual/${job.manual_job_id}`;
-    }
     const from = encodeURIComponent(boardHref);
+    if (job.isManual && job.manual_job_id) {
+      return `/jobs/manual/${job.manual_job_id}?from=${from}`;
+    }
     return `/jobs/${job.id}?from=${from}`;
   };
 
@@ -131,7 +150,7 @@ export function JobBoard({
 
       <div className="space-y-6">
         <form action="/" method="get" className="flex gap-2">
-          {view !== 'all' && <input type="hidden" name="view" value={view} />}
+          <input type="hidden" name="view" value={view} />
           {view === 'applied' && stage && <input type="hidden" name="stage" value={stage} />}
           {sort !== 'date' && <input type="hidden" name="sort" value={sort} />}
           {filters.minSalary && <input type="hidden" name="min_salary" value={filters.minSalary} />}
@@ -236,7 +255,7 @@ export function JobBoard({
 
         {view === 'preferred' && (
           <p className="text-sm text-zinc-500">
-            Jobs matching your interest areas (sports, energy, analytics, and related fields). Narrow
+            Jobs matching your interest areas (sports, economics, energy, analytics, and related fields). Narrow
             categories in the sidebar, or combine with location and salary filters.
           </p>
         )}
@@ -255,7 +274,8 @@ export function JobBoard({
         {view === 'applied' && (
           <p className="text-sm text-zinc-500">
             Jobs you&apos;ve applied to. Update the stage as you hear back — applied, interviewing,
-            rejected, or offered.
+            rejected, or offered. Jobs in the interviewing stage show a prep button below the stage
+            dropdown.
           </p>
         )}
 
@@ -266,6 +286,107 @@ export function JobBoard({
             </a>{' '}
             to tailor resumes, track applications, and manage digest email preferences.
           </p>
+        )}
+
+        {jobs.some((job) => job.is_special) && (
+          <section
+            aria-label="Priority job opportunities"
+            className="overflow-hidden rounded-2xl border-2 border-amber-400/70 bg-gradient-to-br from-amber-400/15 via-zinc-900 to-zinc-950 p-1 shadow-[0_0_40px_-12px_rgba(251,191,36,0.55)]"
+          >
+            <div className="rounded-[14px] bg-zinc-950/80 px-5 py-4">
+              <div className="mb-4 flex flex-wrap items-center gap-3">
+                <span className="rounded-full bg-amber-400 px-3 py-1 text-xs font-bold uppercase tracking-wider text-zinc-950">
+                  Priority opportunity
+                </span>
+                <p className="text-sm font-medium text-amber-100">
+                  {jobs.filter((job) => job.is_special).length === 1
+                    ? priorityBannerText(
+                        jobs.find((job) => job.is_special)!.source,
+                        jobs.find((job) => job.is_special)!.company
+                      )
+                    : 'Priority watched roles are pinned to the top of your board.'}
+                </p>
+              </div>
+              <div className="space-y-4">
+                {jobs
+                  .filter((job) => job.is_special)
+                  .map((job) => {
+                    const cardKey = job.isManual ? job.manual_job_id! : String(job.id);
+                    const priorityMeta = prioritySourceMeta(job.source, job.company);
+                    return (
+                      <article
+                        key={`special-${cardKey}`}
+                        className="rounded-xl border border-amber-400/40 bg-zinc-900/90 p-6"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-4">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Link
+                                href={jobHref(job)}
+                                className="text-2xl font-bold text-zinc-50 hover:text-amber-300"
+                              >
+                                {job.title}
+                              </Link>
+                              {job.fit_level && (
+                                <FitLevelBadge fitLevel={job.fit_level} fitScore={job.fit_score} />
+                              )}
+                            </div>
+                            <p className="mt-2 text-base font-semibold text-amber-200">
+                              {job.company ?? priorityMeta.label}
+                            </p>
+                            <p className="mt-1 text-sm text-zinc-400">
+                              {job.location ?? 'Location n/a'} · {job.source}
+                              <span className="mx-2 text-zinc-600">·</span>
+                              Posted {formatPostedDate(job.posted_at, job.created_at)}
+                            </p>
+                            {job.description && (() => {
+                              const preview = descriptionPreview(job.description);
+                              if (!preview) return null;
+                              return (
+                                <p className="mt-4 line-clamp-3 text-sm leading-relaxed text-zinc-300">
+                                  {preview}
+                                </p>
+                              );
+                            })()}
+                          </div>
+                          <div className="flex shrink-0 flex-col items-end gap-3">
+                            <div className="font-mono text-base text-emerald-400">{salaryDisplay(job)}</div>
+                            <a
+                              href={job.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-bold text-zinc-950 hover:bg-amber-300"
+                            >
+                              {priorityMeta.externalCta}
+                            </a>
+                            {signedIn && (view === 'all' || view === 'preferred') && (
+                              <div className="flex flex-col items-end gap-1">
+                                <a
+                                  href={tailorHref(job)}
+                                  className="text-xs font-medium text-amber-400 hover:text-amber-300"
+                                >
+                                  Tailor resume →
+                                </a>
+                                {job.isManual ? (
+                                  <MarkAppliedButton manualJobId={job.manual_job_id} />
+                                ) : (
+                                  <MarkAppliedButton jobId={job.id} />
+                                )}
+                                {job.isManual ? (
+                                  <DismissJobButton manualJobId={job.manual_job_id} />
+                                ) : (
+                                  <DismissJobButton jobId={job.id} />
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+              </div>
+            </div>
+          </section>
         )}
 
         <div className="divide-y divide-zinc-800 rounded-xl border border-zinc-800 bg-zinc-900/50">
@@ -282,23 +403,30 @@ export function JobBoard({
                   : 'No jobs in this view yet. Run the scraper or check back after the next daily pull.'}
             </p>
           ) : (
-            jobs.map((job) => {
+            jobs
+              .filter((job) => !job.is_special)
+              .map((job) => {
               const matchedCategories =
                 view === 'preferred' ? matchJobToCategories(job, filters.categories) : [];
+              const cardKey = job.isManual ? job.manual_job_id! : String(job.id);
+              const showInterviewPrep =
+                signedIn && view === 'applied' && job.application_stage === 'interviewing';
 
-              return (
-              <article
-                key={job.isManual ? job.manual_job_id : job.id}
-                className="p-5 transition hover:bg-zinc-900"
-              >
+              const article = (
+              <article key={cardKey} className="p-5 transition hover:bg-zinc-900">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <a
-                      href={jobHref(job)}
-                      className="text-lg font-semibold text-zinc-50 hover:text-amber-300"
-                    >
-                      {job.title}
-                    </a>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        href={jobHref(job)}
+                        className="text-lg font-semibold text-zinc-50 hover:text-amber-300"
+                      >
+                        {job.title}
+                      </Link>
+                      {job.fit_level && (
+                        <FitLevelBadge fitLevel={job.fit_level} fitScore={job.fit_score} />
+                      )}
+                    </div>
                     <p className="mt-1.5 text-sm font-medium text-zinc-300">
                       {job.company ?? 'Unknown company'}
                       <span className="mx-2 text-zinc-600">·</span>
@@ -334,7 +462,16 @@ export function JobBoard({
                         >
                           Tailor resume →
                         </a>
-                        {!job.isManual && <MarkAppliedButton jobId={job.id} />}
+                        {job.isManual ? (
+                          <MarkAppliedButton manualJobId={job.manual_job_id} />
+                        ) : (
+                          <MarkAppliedButton jobId={job.id} />
+                        )}
+                        {job.isManual ? (
+                          <DismissJobButton manualJobId={job.manual_job_id} />
+                        ) : (
+                          <DismissJobButton jobId={job.id} />
+                        )}
                       </div>
                     )}
                     {signedIn && view === 'applied' && job.application_stage && (
@@ -345,19 +482,19 @@ export function JobBoard({
                           stage={job.application_stage}
                           compact
                         />
-                        <form action={removeJobApplication}>
-                          {job.isManual && job.manual_job_id ? (
-                            <input type="hidden" name="manualJobId" value={job.manual_job_id} />
-                          ) : (
-                            <input type="hidden" name="jobId" value={job.id} />
-                          )}
-                          <button
-                            type="submit"
-                            className="text-xs text-zinc-500 hover:text-zinc-300"
-                          >
-                            Move back to board
-                          </button>
-                        </form>
+                        <a
+                          href={tailorHref(job)}
+                          className="text-xs font-medium text-amber-400 hover:text-amber-300"
+                        >
+                          View resume & cover letter →
+                        </a>
+                        {job.application_stage === 'interviewing' && (
+                          <InterviewPrepTrigger variant="sidebar" />
+                        )}
+                        <RemoveApplicationButton
+                          jobId={job.isManual ? undefined : job.id}
+                          manualJobId={job.manual_job_id}
+                        />
                       </div>
                     )}
                   </div>
@@ -366,16 +503,30 @@ export function JobBoard({
                   const preview = descriptionPreview(job.description);
                   if (!preview) return null;
                   return (
-                    <a
+                    <Link
                       href={jobHref(job)}
                       className="mt-3 block line-clamp-2 text-sm text-zinc-500 hover:text-zinc-400"
                     >
                       {preview}
-                    </a>
+                    </Link>
                   );
                 })()}
+                {showInterviewPrep && <InterviewPrepExpanded variant="sidebar" />}
               </article>
-            );
+              );
+
+              return showInterviewPrep ? (
+                <InterviewPrepProvider
+                  key={cardKey}
+                  jobId={job.isManual ? undefined : job.id}
+                  manualJobId={job.manual_job_id}
+                  initialPrep={parseStoredInterviewPrep(job.interview_prep)}
+                >
+                  {article}
+                </InterviewPrepProvider>
+              ) : (
+                article
+              );
             })
           )}
         </div>

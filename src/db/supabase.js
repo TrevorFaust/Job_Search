@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { parseSalary } from '../../lib/salary.js';
-import { mergeJobRecords } from '../scrapers/utils.js';
+import { mergeJobRecords, isJunkTitle } from '../scrapers/utils.js';
 
 let client;
 
@@ -52,6 +52,7 @@ function jobRow(j) {
     posted_at: j.postedAt,
     expires_at: expiresAt.toISOString(),
     status: 'active',
+    is_special: Boolean(j.isSpecial),
   };
 }
 
@@ -73,28 +74,39 @@ export async function saveJobs(jobs) {
     bySource.get(row.source).push(row.external_id);
   }
 
-  const existingDesc = new Map();
+  const existingRows = new Map();
   const CHUNK = 100;
   for (const [source, externalIds] of bySource) {
     for (let i = 0; i < externalIds.length; i += CHUNK) {
       const chunk = externalIds.slice(i, i + CHUNK);
       const { data, error } = await getDb()
         .from('jobs')
-        .select('source, external_id, description')
+        .select('source, external_id, title, company, location, salary, posted_at, description')
         .eq('source', source)
         .in('external_id', chunk);
-      if (error) throw new Error(`Load existing descriptions failed: ${error.message}`);
+      if (error) throw new Error(`Load existing jobs failed: ${error.message}`);
       for (const row of data ?? []) {
-        existingDesc.set(`${row.source}:${row.external_id}`, row.description ?? '');
+        existingRows.set(`${row.source}:${row.external_id}`, row);
       }
     }
   }
 
   for (const row of rows) {
     const key = `${row.source}:${row.external_id}`;
-    const existing = existingDesc.get(key) ?? '';
-    const incoming = row.description ?? '';
-    if (existing.length > incoming.length) row.description = existing;
+    const existing = existingRows.get(key);
+    if (!existing) continue;
+
+    const existingDesc = existing.description ?? '';
+    const incomingDesc = row.description ?? '';
+    if (existingDesc.length > incomingDesc.length) row.description = existingDesc;
+
+    if (isJunkTitle(row.title) && existing.title && !isJunkTitle(existing.title)) {
+      row.title = existing.title;
+    }
+    if (!row.company && existing.company) row.company = existing.company;
+    if (!row.location && existing.location) row.location = existing.location;
+    if (!row.salary && existing.salary) row.salary = existing.salary;
+    if (!row.posted_at && existing.posted_at) row.posted_at = existing.posted_at;
   }
 
   const idMap = new Map();
@@ -273,4 +285,24 @@ export async function ensureDefaultSubscriber({ email, keywords, excludeKeywords
 
   console.log(`Created subscriber. Settings URL token: ${sub.edit_token}`);
   return sub.id;
+}
+
+export async function getUnnotifiedSpecialJobs() {
+  const { data, error } = await getDb()
+    .from('jobs')
+    .select('id, source, title, url')
+    .eq('is_special', true)
+    .eq('status', 'active')
+    .is('special_notified_at', null);
+  if (error) throw new Error(`Load unnotified special jobs failed: ${error.message}`);
+  return data ?? [];
+}
+
+export async function markSpecialJobsNotified(jobIds) {
+  if (!jobIds.length) return;
+  const { error } = await getDb()
+    .from('jobs')
+    .update({ special_notified_at: new Date().toISOString() })
+    .in('id', jobIds);
+  if (error) throw new Error(`Mark special jobs notified failed: ${error.message}`);
 }

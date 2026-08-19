@@ -1,5 +1,6 @@
 'use client';
 
+import { useFormStatus } from 'react-dom';
 import { markJobApplied } from '@/lib/application-actions';
 
 type Props = {
@@ -9,6 +10,15 @@ type Props = {
   className?: string;
   label?: string;
 };
+
+function SubmitButton({ className, label }: { className: string; label: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <button type="submit" disabled={pending} className={className} suppressHydrationWarning>
+      {label}
+    </button>
+  );
+}
 
 export function MarkAppliedButton({
   jobId,
@@ -22,9 +32,7 @@ export function MarkAppliedButton({
       {jobId != null && <input type="hidden" name="jobId" value={jobId} />}
       {manualJobId && <input type="hidden" name="manualJobId" value={manualJobId} />}
       {sessionId && <input type="hidden" name="sessionId" value={sessionId} />}
-      <button type="submit" className={className} suppressHydrationWarning>
-        {label}
-      </button>
+      <SubmitButton className={className} label={label} />
     </form>
   );
 }

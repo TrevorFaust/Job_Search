@@ -35,7 +35,7 @@ export function FilterSidebar({ filters, view, stage, sort, q }: Props) {
     <aside className="space-y-5 rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 lg:sticky lg:top-6 lg:self-start">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">Filters</h2>
       <form action="/" method="get" className="space-y-4">
-        {view !== 'all' && <input type="hidden" name="view" value={view} />}
+        <input type="hidden" name="view" value={view} />
         {view === 'applied' && stage && <input type="hidden" name="stage" value={stage} />}
         {sort !== 'date' && <input type="hidden" name="sort" value={sort} />}
         {q && <input type="hidden" name="q" value={q} />}
