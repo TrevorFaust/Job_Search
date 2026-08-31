@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { parseSalary } from '../../lib/salary.js';
+import { withExtractedSalary } from '../../lib/salary.js';
 import { mergeJobRecords, isJunkTitle } from '../scrapers/utils.js';
 
 let client;
@@ -31,13 +31,21 @@ export async function getLastScrapeAt() {
   return data?.created_at ? new Date(data.created_at) : null;
 }
 
+function applySalaryFields(row) {
+  const next = withExtractedSalary(row);
+  if (next.salary_min_annual == null && next.salary_max_annual == null) return;
+  row.salary = next.salary;
+  row.salary_raw = next.salary;
+  row.salary_min_annual = next.salary_min_annual;
+  row.salary_max_annual = next.salary_max_annual;
+}
+
 function jobRow(j) {
-  const parsed = parseSalary(j.salary);
   const postedAt = j.postedAt ? new Date(j.postedAt) : new Date();
   const expiresAt = new Date(postedAt);
   expiresAt.setDate(expiresAt.getDate() + JOB_RETENTION_DAYS);
 
-  return {
+  const row = {
     source: j.source,
     external_id: j.externalId,
     title: j.title,
@@ -45,15 +53,17 @@ function jobRow(j) {
     location: j.location,
     url: j.url,
     salary: j.salary,
-    salary_raw: parsed?.raw ?? j.salary,
-    salary_min_annual: parsed?.min ?? null,
-    salary_max_annual: parsed?.max ?? null,
+    salary_raw: j.salary,
+    salary_min_annual: null,
+    salary_max_annual: null,
     description: j.description,
     posted_at: j.postedAt,
     expires_at: expiresAt.toISOString(),
     status: 'active',
     is_special: Boolean(j.isSpecial),
   };
+  applySalaryFields(row);
+  return row;
 }
 
 /** Upsert scraped jobs. Returns map of "source:external_id" → db id. */
@@ -81,7 +91,7 @@ export async function saveJobs(jobs) {
       const chunk = externalIds.slice(i, i + CHUNK);
       const { data, error } = await getDb()
         .from('jobs')
-        .select('source, external_id, title, company, location, salary, posted_at, description')
+        .select('source, external_id, title, company, location, salary, salary_min_annual, salary_max_annual, posted_at, description')
         .eq('source', source)
         .in('external_id', chunk);
       if (error) throw new Error(`Load existing jobs failed: ${error.message}`);
@@ -107,6 +117,11 @@ export async function saveJobs(jobs) {
     if (!row.location && existing.location) row.location = existing.location;
     if (!row.salary && existing.salary) row.salary = existing.salary;
     if (!row.posted_at && existing.posted_at) row.posted_at = existing.posted_at;
+    applySalaryFields(row);
+    if (row.salary_min_annual == null && existing.salary_min_annual != null) {
+      row.salary_min_annual = existing.salary_min_annual;
+      row.salary_max_annual = existing.salary_max_annual;
+    }
   }
 
   const idMap = new Map();
@@ -126,12 +141,24 @@ export async function saveJobs(jobs) {
 
 export async function expireOldJobs() {
   const now = new Date().toISOString();
-  const { error } = await getDb()
-    .from('jobs')
-    .update({ status: 'expired' })
-    .eq('status', 'active')
-    .lt('expires_at', now);
-  if (error) throw new Error(`Expire jobs failed: ${error.message}`);
+  const db = getDb();
+  const CHUNK = 500;
+
+  while (true) {
+    const { data, error } = await db
+      .from('jobs')
+      .select('id')
+      .eq('status', 'active')
+      .lt('expires_at', now)
+      .limit(CHUNK);
+    if (error) throw new Error(`Expire jobs failed: ${error.message}`);
+
+    const ids = (data ?? []).map((r) => r.id);
+    if (!ids.length) break;
+
+    const { error: updErr } = await db.from('jobs').update({ status: 'expired' }).in('id', ids);
+    if (updErr) throw new Error(`Expire jobs failed: ${updErr.message}`);
+  }
 }
 
 /**

@@ -32,6 +32,33 @@ create index if not exists jobs_special_active_idx
   on public.jobs (is_special, status)
   where is_special = true and status = 'active';
 
+create index if not exists jobs_active_expires_idx
+  on public.jobs (expires_at)
+  where status = 'active';
+
+create index if not exists jobs_active_board_posted_idx
+  on public.jobs (posted_at DESC NULLS LAST, id DESC)
+  where status = 'active';
+
+create index if not exists jobs_active_nonspecial_board_posted_idx
+  on public.jobs (posted_at DESC NULLS LAST, id DESC)
+  where status = 'active' and is_special = false;
+
+alter table public.jobs
+  add column if not exists board_search tsvector
+  generated always as (
+    to_tsvector(
+      'simple',
+      coalesce(title, '') || ' ' ||
+      coalesce(company, '') || ' ' ||
+      coalesce(left(description, 4000), '')
+    )
+  ) stored;
+
+create index if not exists jobs_active_board_search_idx
+  on public.jobs using gin (board_search)
+  where status = 'active';
+
 create table if not exists public.subscribers (
   id uuid primary key default gen_random_uuid(),
   email text unique not null,
@@ -170,6 +197,7 @@ create table if not exists public.job_applications (
   tailoring_session_id uuid references public.tailoring_sessions(id) on delete set null,
   notes text not null default '',
   interview_prep jsonb not null default '{}'::jsonb,
+  follow_up_contacts jsonb not null default '{}'::jsonb,
   applied_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   check (
@@ -182,6 +210,9 @@ create table if not exists public.job_applications (
 alter table public.job_applications alter column job_id drop not null;
 alter table public.job_applications
   add column if not exists manual_job_id uuid references public.manual_jobs(id) on delete cascade;
+
+alter table public.job_applications
+  add column if not exists follow_up_contacts jsonb not null default '{}'::jsonb;
 
 alter table public.job_applications drop constraint if exists job_applications_subscriber_id_job_id_key;
 alter table public.job_applications drop constraint if exists job_applications_subscriber_id_job_id_key1;
