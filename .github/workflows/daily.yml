@@ -22,6 +22,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Smoke test startup imports
+        run: node -e "import('./src/db/supabase.js')"
+
       - name: Install Playwright browser (for Dice scraper)
         run: npx playwright install --with-deps chromium
 

@@ -9,6 +9,7 @@ import {
   pruneBoardIfOverCapacity,
   getActiveProfiles,
   getLastScrapeAt,
+  recordScrapeAt,
   upsertProfileMatch,
   getUnsentMatchesForProfiles,
   markMatchesEmailed,
@@ -145,6 +146,7 @@ async function main() {
 
   const idMap = await saveJobs(scraped);
   console.log(`Saved/updated ${idMap.size} jobs in database`);
+  await recordScrapeAt();
 
   const unnotifiedSpecial = await getUnnotifiedSpecialJobs();
   if (unnotifiedSpecial.length) {

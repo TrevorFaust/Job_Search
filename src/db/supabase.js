@@ -21,14 +21,41 @@ export const BOARD_MAX_JOBS = 100_000;
 
 /** When the scraper last wrote jobs (any source). Used to size the daily catch-up window. */
 export async function getLastScrapeAt() {
-  const { data, error } = await getDb()
+  const db = getDb();
+
+  const { data: state, error: stateErr } = await db
+    .from('scraper_state')
+    .select('value')
+    .eq('key', 'last_scrape_at')
+    .maybeSingle();
+  if (!stateErr && state?.value) {
+    return new Date(state.value);
+  }
+  if (stateErr) {
+    console.warn(`Load last scrape time from scraper_state failed: ${stateErr.message}`);
+  }
+
+  // Fallback: newest row by PK (indexed). Avoids a full-table sort on created_at.
+  const { data, error } = await db
     .from('jobs')
     .select('created_at')
-    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (error) throw new Error(`Load last scrape time failed: ${error.message}`);
+  if (error) {
+    console.warn(`Load last scrape time failed: ${error.message} — using default window`);
+    return null;
+  }
   return data?.created_at ? new Date(data.created_at) : null;
+}
+
+/** Record a successful scrape so getLastScrapeAt stays O(1) as the jobs table grows. */
+export async function recordScrapeAt(at = new Date()) {
+  const iso = at.toISOString();
+  const { error } = await getDb()
+    .from('scraper_state')
+    .upsert({ key: 'last_scrape_at', value: iso, updated_at: iso }, { onConflict: 'key' });
+  if (error) console.warn(`Record last scrape time failed: ${error.message}`);
 }
 
 function applySalaryFields(row) {

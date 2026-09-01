@@ -59,6 +59,17 @@ create index if not exists jobs_active_board_search_idx
   on public.jobs using gin (board_search)
   where status = 'active';
 
+create index if not exists jobs_created_at_desc_idx
+  on public.jobs (created_at desc);
+
+create table if not exists public.scraper_state (
+  key text primary key,
+  value timestamptz not null,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.scraper_state enable row level security;
+
 create table if not exists public.subscribers (
   id uuid primary key default gen_random_uuid(),
   email text unique not null,
