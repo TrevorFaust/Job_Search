@@ -19,6 +19,7 @@ export type JobApplication = {
   tailoring_session_id: string | null;
   notes: string;
   interview_prep: Record<string, unknown>;
+  follow_up_contacts?: Record<string, unknown>;
   applied_at: string;
   updated_at: string;
 };

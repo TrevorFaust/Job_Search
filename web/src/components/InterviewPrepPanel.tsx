@@ -16,6 +16,7 @@ type ProviderProps = {
   jobId?: number;
   manualJobId?: string;
   initialPrep?: StoredInterviewPrep | null;
+  defaultExpanded?: boolean;
   children: ReactNode;
 };
 
@@ -73,10 +74,11 @@ export function InterviewPrepProvider({
   jobId,
   manualJobId,
   initialPrep = null,
+  defaultExpanded = false,
   children,
 }: ProviderProps) {
   const [prep, setPrep] = useState<StoredInterviewPrep | null>(initialPrep);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [openQuestion, setOpenQuestion] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);

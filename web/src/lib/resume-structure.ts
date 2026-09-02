@@ -24,6 +24,15 @@ const SECTION_PATTERNS = [
   /^awards$/i,
 ];
 
+/** Replace em/en dashes with spaced hyphens for consistent resume/letter copy. */
+export function stripEmDashes(text: string): string {
+  return text
+    .replace(/\u2014/g, ' - ')
+    .replace(/\u2013/g, ' - ')
+    .replace(/\s+-\s+/g, ' - ')
+    .trim();
+}
+
 function isSectionHeader(line: string) {
   const t = line.trim().replace(/:$/, '');
   if (!t || t.length > 60) return false;

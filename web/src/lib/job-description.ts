@@ -40,7 +40,7 @@ function normalizeText(text: string) {
   return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
 }
 
-function stripHtml(html = '') {
+export function stripHtml(html = '') {
   return html
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>/gi, '\n\n')

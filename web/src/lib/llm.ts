@@ -507,6 +507,63 @@ export type InterviewAnswerRevision = {
   notes: string;
 };
 
+export type FollowUpContactRole = 'hiring_manager' | 'recruiter' | 'team_lead' | 'other';
+
+export type FollowUpContactChannel = 'linkedin' | 'email' | 'other';
+
+export type FollowUpContact = {
+  id?: string;
+  name: string;
+  title: string;
+  linkedin_url?: string;
+  email?: string;
+  email_confidence?: 'high' | 'medium' | 'low';
+  email_pattern_note?: string;
+  role_type: FollowUpContactRole;
+  rationale: string;
+  confidence: 'high' | 'medium' | 'low';
+  company_evidence?: string;
+  followed_up_at?: string;
+  follow_up_channel?: FollowUpContactChannel;
+  follow_up_notes?: string;
+  connection_note?: string;
+  follow_up_message?: string;
+  source?: 'search' | 'manual';
+};
+
+export type FollowUpContactsResult = {
+  overview: string;
+  contacts: FollowUpContact[];
+  connection_note: string;
+  follow_up_message: string;
+  company_email_domain?: string;
+  email_pattern?: string;
+};
+
+export type FollowUpContactsContext = {
+  resumeText: string;
+  job: { title: string; company: string | null; description: string; url?: string | null };
+  gapAnalysis?: GapAnalysis | null;
+  searchResultsText: string;
+  guessedEmailDomain?: string | null;
+  /** primary = recruiters/hiring managers; adjacent = verified teammates in related roles */
+  searchMode?: 'primary' | 'adjacent';
+  excludeNames?: string[];
+};
+
+export type DraftFollowUpContactContext = {
+  resumeText: string;
+  job: { title: string; company: string | null; description: string; url?: string | null };
+  gapAnalysis?: GapAnalysis | null;
+  contact: FollowUpContact;
+  extraContext?: string;
+  revisionNotes?: string;
+  currentDraft?: {
+    connection_note?: string;
+    follow_up_message?: string;
+  };
+};
+
 const INTERVIEW_ANSWER_REVISE_SYSTEM = `You are an expert interview coach. The candidate already likes a drafted spoken answer and asked for a light edit.
 
 Rules:
@@ -579,5 +636,174 @@ export async function answerInterviewQuestion(
     watch_outs: parsed.watch_outs
       ? directVoice(parsed.watch_outs, context.resumeText)
       : undefined,
+  };
+}
+
+const FOLLOW_UP_CONTACTS_SYSTEM = `You are a job-search strategist helping a candidate follow up after applying.
+
+Given a job posting, the candidate's resume, and web search results, recommend specific people to reach out to on LinkedIn or email.
+
+Rules:
+- Pick REAL people whose names appear in the search results. Do NOT invent names.
+- Prefer recruiters and hiring managers in the relevant team; include team leads when they clearly match the role.
+- Deprioritize C-suite unless they directly own the function for this role.
+- Skip people who clearly left the company or are unrelated to the posting.
+- linkedin_url: use a URL from search results when available (linkedin.com/in/...). Omit if unsure.
+- company_evidence: short quote from search results showing they work at the company (max ~200 chars).
+- rationale: 2–3 sentences on why contact this person. Coach the candidate with "you".
+- confidence: high if title/department match is exact; medium if plausible; low if uncertain.
+- company_email_domain / email_pattern: only if clearly supported by search results; otherwise omit.
+- Global connection_note and follow_up_message are optional templates — per-contact copy is drafted separately.
+- overview: 1–2 sentences on overall outreach strategy.
+- Respond with a single JSON object only — no markdown fences.`;
+
+const DRAFT_FOLLOW_UP_CONTACT_SYSTEM = `You are a job-search coach drafting LinkedIn outreach for ONE specific contact.
+
+Rules:
+- connection_note: under 300 characters for a LinkedIn connection request. First person, specific to the role and this person.
+- follow_up_message: 3–6 sentences for InMail or email if already connected. Reference the role and one real strength from the resume.
+- Address the contact by first name when natural.
+- NEVER invent employers, projects, or credentials.
+- If revision_notes are provided, lightly edit the current draft — do not rewrite from scratch.
+- Respond with a single JSON object only — no markdown fences.`;
+
+function normalizeFollowUpRole(value: unknown): FollowUpContactRole {
+  const roles = new Set<FollowUpContactRole>(['hiring_manager', 'recruiter', 'team_lead', 'other']);
+  return roles.has(value as FollowUpContactRole) ? (value as FollowUpContactRole) : 'other';
+}
+
+function normalizeFollowUpConfidence(value: unknown): FollowUpContact['confidence'] {
+  const levels = new Set(['high', 'medium', 'low']);
+  return levels.has(String(value)) ? (value as FollowUpContact['confidence']) : 'medium';
+}
+
+function normalizeFollowUpContacts(
+  contacts: FollowUpContact[] | undefined,
+  resumeText: string
+): FollowUpContact[] {
+  return (contacts ?? [])
+    .slice(0, 10)
+    .map((c) => ({
+      name: (c.name ?? '').trim(),
+      title: (c.title ?? '').trim(),
+      linkedin_url: c.linkedin_url?.trim() || undefined,
+      email: c.email?.trim() || undefined,
+      role_type: normalizeFollowUpRole(c.role_type),
+      rationale: directVoice(c.rationale ?? '', resumeText),
+      confidence: normalizeFollowUpConfidence(c.confidence),
+      company_evidence: c.company_evidence?.trim().slice(0, 220) || undefined,
+      source: 'search' as const,
+    }))
+    .filter((c) => c.name.length > 1 && c.title.length > 0);
+}
+
+export async function generateFollowUpContacts(
+  context: FollowUpContactsContext
+): Promise<FollowUpContactsResult> {
+  const mode = context.searchMode ?? 'primary';
+  const exclude = (context.excludeNames ?? []).map((n) => n.trim()).filter(Boolean);
+
+  const userPrompt = JSON.stringify({
+    search_mode: mode,
+    exclude_names: exclude.length ? exclude : null,
+    guessed_email_domain: context.guessedEmailDomain ?? null,
+    job: {
+      title: context.job.title,
+      company: context.job.company,
+      url: context.job.url ?? null,
+      description: context.job.description.slice(0, 6000),
+    },
+    resume: context.resumeText.slice(0, 4000),
+    gap_analysis: context.gapAnalysis ? compactGapAnalysis(context.gapAnalysis) : null,
+    web_search_results: context.searchResultsText.slice(0, 12000),
+    output_schema: {
+      overview: 'string — outreach strategy, use "you"',
+      contacts: [
+        {
+          name: 'string',
+          title: 'string',
+          linkedin_url: 'optional string',
+          email: 'optional string — only if clearly in search results',
+          role_type: 'hiring_manager | recruiter | team_lead | other',
+          rationale: 'string',
+          confidence: 'high | medium | low',
+          company_evidence: 'optional string',
+        },
+      ],
+      connection_note: 'optional string — global template under 300 chars',
+      follow_up_message: 'optional string — global template',
+      company_email_domain: 'optional string like company.com',
+      email_pattern: 'optional string like first.last@company.com',
+    },
+  });
+
+  const modeHint =
+    mode === 'adjacent'
+      ? 'Find additional teammates in adjacent roles who still work at the company. Skip people already listed in exclude_names.'
+      : 'Prioritize recruiters and hiring managers for this exact role. Recommend up to 8 contacts when search results support them.';
+
+  const raw = await claudeText(
+    FOLLOW_UP_CONTACTS_SYSTEM,
+    `${modeHint} Return JSON only.\n\n${userPrompt}`,
+    4000,
+    getInterviewModel()
+  );
+
+  const parsed = parseJsonResponse<FollowUpContactsResult>(raw);
+  const contacts = normalizeFollowUpContacts(parsed.contacts, context.resumeText);
+
+  return {
+    overview: directVoice(parsed.overview ?? '', context.resumeText),
+    contacts,
+    connection_note: (parsed.connection_note ?? '').trim().slice(0, 300),
+    follow_up_message: (parsed.follow_up_message ?? '').trim(),
+    company_email_domain:
+      parsed.company_email_domain?.trim() || context.guessedEmailDomain?.trim() || undefined,
+    email_pattern: parsed.email_pattern?.trim() || undefined,
+  };
+}
+
+export async function draftFollowUpContactMessage(
+  context: DraftFollowUpContactContext
+): Promise<{ connection_note: string; follow_up_message: string }> {
+  const firstName = context.contact.name.split(/\s+/)[0] ?? 'there';
+  const userPrompt = JSON.stringify({
+    contact: {
+      name: context.contact.name,
+      title: context.contact.title,
+      role_type: context.contact.role_type,
+      linkedin_url: context.contact.linkedin_url ?? null,
+      email: context.contact.email ?? null,
+      rationale: context.contact.rationale,
+    },
+    job: {
+      title: context.job.title,
+      company: context.job.company,
+      description: context.job.description.slice(0, 4000),
+    },
+    resume: context.resumeText.slice(0, 4000),
+    gap_analysis: context.gapAnalysis ? compactGapAnalysis(context.gapAnalysis) : null,
+    extra_context: context.extraContext?.trim().slice(0, 1500) || null,
+    revision_notes: context.revisionNotes?.trim().slice(0, 1500) || null,
+    current_draft: context.currentDraft ?? null,
+    output_schema: {
+      connection_note: `string — under 300 chars, first person, address ${firstName} naturally`,
+      follow_up_message: 'string — 3–6 sentences, first person',
+    },
+  });
+
+  const raw = await claudeText(
+    DRAFT_FOLLOW_UP_CONTACT_SYSTEM,
+    context.revisionNotes
+      ? `Revise the outreach draft for this contact. Return JSON only.\n\n${userPrompt}`
+      : `Draft outreach for this contact. Return JSON only.\n\n${userPrompt}`,
+    2000,
+    getInterviewModel()
+  );
+
+  const parsed = parseJsonResponse<{ connection_note?: string; follow_up_message?: string }>(raw);
+  return {
+    connection_note: (parsed.connection_note ?? '').trim().slice(0, 300),
+    follow_up_message: (parsed.follow_up_message ?? '').trim(),
   };
 }

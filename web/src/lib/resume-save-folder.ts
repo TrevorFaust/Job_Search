@@ -2,7 +2,22 @@ const DB_NAME = 'job-hunt-resume-save';
 const STORE = 'kv';
 const DIR_KEY = 'directory';
 
-type DirHandle = FileSystemDirectoryHandle;
+type DirHandle = FileSystemDirectoryHandle & {
+  queryPermission?: (descriptor: { mode: 'read' | 'readwrite' }) => Promise<PermissionState>;
+  requestPermission?: (descriptor: { mode: 'read' | 'readwrite' }) => Promise<PermissionState>;
+};
+
+type DirectoryPickerWindow = Window & {
+  showDirectoryPicker?: (options?: {
+    id?: string;
+    mode?: 'read' | 'readwrite';
+    startIn?: string;
+  }) => Promise<FileSystemDirectoryHandle>;
+};
+
+function directoryPickerWindow() {
+  return window as DirectoryPickerWindow;
+}
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -59,7 +74,7 @@ function idbDel(key: string): Promise<void> {
 }
 
 export function canPickSaveFolder() {
-  return typeof window !== 'undefined' && typeof window.showDirectoryPicker === 'function';
+  return typeof window !== 'undefined' && typeof directoryPickerWindow().showDirectoryPicker === 'function';
 }
 
 export async function getSavedDirectory(): Promise<DirHandle | null> {
@@ -73,7 +88,9 @@ export async function getSavedDirectory(): Promise<DirHandle | null> {
 }
 
 export async function pickSaveDirectory(): Promise<DirHandle> {
-  const handle = await window.showDirectoryPicker({
+  const picker = directoryPickerWindow().showDirectoryPicker;
+  if (!picker) throw new Error('Folder picker is not supported in this browser');
+  const handle = await picker({
     id: 'job-hunt-resumes',
     mode: 'readwrite',
     startIn: 'documents',
@@ -88,6 +105,7 @@ export async function clearSavedDirectory() {
 
 async function ensureWritePermission(handle: DirHandle): Promise<boolean> {
   const opts = { mode: 'readwrite' as const };
+  if (!handle.queryPermission || !handle.requestPermission) return true;
   if ((await handle.queryPermission(opts)) === 'granted') return true;
   return (await handle.requestPermission(opts)) === 'granted';
 }
@@ -97,7 +115,9 @@ export async function writeBlobToSavedFolder(filename: string, blob: Blob): Prom
   if (!handle) return null;
   if (!(await ensureWritePermission(handle))) return null;
   const file = await handle.getFileHandle(filename, { create: true });
-  const writable = await file.createWritable();
+  const writable = await (file as FileSystemFileHandle & {
+    createWritable: () => Promise<FileSystemWritableFileStream>;
+  }).createWritable();
   await writable.write(blob);
   await writable.close();
   return handle.name;
