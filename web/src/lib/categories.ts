@@ -249,6 +249,27 @@ export function filterByCategories<T extends Job>(jobs: T[], categoryIds: string
   return jobs.filter((job) => matchJobToCategories(job, categoryIds).length > 0);
 }
 
+const CATEGORY_DB_KEYWORD_CAP = 36;
+
+function sanitizeIlikeToken(value: string): string {
+  return value.replace(/[%_,]/g, ' ').trim();
+}
+
+/** Keywords for a coarse Postgres ilike filter (preferred tab). */
+export function categoryDbKeywords(categoryIds: string[]): string[] {
+  const keywords = new Set<string>();
+  for (const id of categoryIds) {
+    const cat = CATEGORY_BY_ID.get(id);
+    if (!cat) continue;
+    for (const kw of cat.keywords) {
+      const token = sanitizeIlikeToken(kw);
+      if (token.length >= 3) keywords.add(token);
+      if (keywords.size >= CATEGORY_DB_KEYWORD_CAP) return [...keywords];
+    }
+  }
+  return [...keywords];
+}
+
 export function parseCategoryIds(params: Record<string, string | string[] | undefined>): string[] {
   const raw = params.cat ?? params.cats;
   const values = (Array.isArray(raw) ? raw : raw ? [raw] : [])

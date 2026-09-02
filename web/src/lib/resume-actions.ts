@@ -298,6 +298,117 @@ export async function generateCoverLetterDraft(sessionId: string, extraContext =
   return { cover_letter_text };
 }
 
+export async function saveResumeDraftOutput(sessionId: string, outputText: string) {
+  const sub = await requireSubscriber();
+  const session = await getTailoringSession(sessionId, sub.id);
+  if (!session) throw new Error('Session not found');
+  const trimmed = outputText.trim();
+  if (!trimmed) throw new Error('Resume draft is empty');
+  await updateSession(sessionId, sub.id, { output_text: trimmed, status: 'done' });
+  return { output_text: trimmed };
+}
+
+export async function saveCoverLetter(sessionId: string, coverLetterText: string) {
+  const sub = await requireSubscriber();
+  const session = await getTailoringSession(sessionId, sub.id);
+  if (!session) throw new Error('Session not found');
+  const trimmed = coverLetterText.trim();
+  if (!trimmed) throw new Error('Cover letter is empty');
+  await updateSession(sessionId, sub.id, { cover_letter_text: trimmed });
+  return { cover_letter_text: trimmed };
+}
+
+const MAX_REVISION_LENGTH = 1500;
+
+export async function reviseTailoredDraft(
+  sessionId: string,
+  revisionNotes: string,
+  target: 'resume' | 'cover-letter',
+  currentResumeOutput?: string | null,
+  currentCoverLetter?: string | null
+) {
+  const sub = await requireSubscriber();
+  const session = await getTailoringSession(sessionId, sub.id);
+  if (!session) throw new Error('Session not found');
+  if (session.status !== 'done' || !session.output_text) {
+    throw new Error('Generate a draft first');
+  }
+
+  const notes = revisionNotes.trim();
+  if (!notes) throw new Error('Describe what you want changed before regenerating');
+  if (notes.length > MAX_REVISION_LENGTH) {
+    throw new Error(`Keep revision notes under ${MAX_REVISION_LENGTH} characters`);
+  }
+
+  const bank = await getAnswerBank(sub.id);
+  const [resume, job] = await Promise.all([
+    getActiveResume(sub.id),
+    resolveJobForSession(session, sub.id),
+  ]);
+  if (!resume || !job?.description) throw new Error('Missing resume or job');
+
+  const context = session.extra_context?.trim() || '';
+  const gapAnalysis: GapAnalysis =
+    session.gap_analysis && 'summary' in session.gap_analysis
+      ? (session.gap_analysis as GapAnalysis)
+      : { strong_matches: [], partial_matches: [], gaps: [], summary: '' };
+  const fullAnswers = buildFullAnswerSet(session.questions, session.answers, bank);
+  const pagePreference = session.page_preference ?? 'one';
+
+  await updateSession(sessionId, sub.id, { status: 'generating', error_message: null });
+
+  try {
+    if (target === 'resume') {
+      const previousOutput = (currentResumeOutput ?? session.output_text ?? '').trim();
+      if (!previousOutput) throw new Error('No resume draft to revise');
+
+      const formatMeta =
+        (resume.format_meta?.sectionOrder?.length ?? 0) > 0
+          ? resume.format_meta
+          : extractResumeStructure(resume.content_text);
+
+      const output_text = await generateTailoredResume(
+        resume.content_text,
+        { title: job.title, company: job.company, description: job.description },
+        gapAnalysis,
+        fullAnswers,
+        {
+          extraContext: context,
+          pageLength: pagePreference,
+          formatMeta,
+          previousOutput,
+          revisionNotes: notes,
+        }
+      );
+
+      await updateSession(sessionId, sub.id, { status: 'done', output_text });
+      return { output_text, cover_letter_text: session.cover_letter_text };
+    }
+
+    const previousBody = (currentCoverLetter ?? session.cover_letter_text ?? '').trim();
+    if (!previousBody) throw new Error('No cover letter draft to revise');
+
+    const cover_letter_text = await generateCoverLetter(
+      resume.content_text,
+      { title: job.title, company: job.company, description: job.description },
+      gapAnalysis,
+      fullAnswers,
+      {
+        extraContext: context,
+        previousBody,
+        revisionNotes: notes,
+      }
+    );
+
+    await updateSession(sessionId, sub.id, { status: 'done', cover_letter_text });
+    return { output_text: session.output_text, cover_letter_text };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Revision failed';
+    await updateSession(sessionId, sub.id, { status: 'failed', error_message: message });
+    throw err;
+  }
+}
+
 export async function resetTailorSession(sessionId: string) {
   const sub = await requireSubscriber();
   const session = await getTailoringSession(sessionId, sub.id);

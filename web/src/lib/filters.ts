@@ -49,8 +49,8 @@ function sortJobsByKey<T extends Job>(jobs: T[], sort: SortKey): T[] {
 
 export const PAGE_SIZE = 50;
 
-/** Max jobs loaded on the public board (Supabase fetches in 1k batches). */
-export const BOARD_MAX_JOBS = 100_000;
+/** Max jobs scanned in memory when geocoding / onsite filters require it. */
+export const BOARD_SCAN_LIMIT = 4_000;
 
 export const RECENCY_OPTIONS = [
   { id: '', label: 'Any time', days: null },

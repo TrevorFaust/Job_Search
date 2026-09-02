@@ -5,16 +5,23 @@ import { useState, useTransition } from 'react';
 import type { TailorJobView } from '@/lib/manual-jobs';
 import type { ApplicationStage } from '@/lib/applications';
 import type { TailoringSession } from '@/lib/resume-queries';
-import type { TailorAnswer } from '@/lib/llm';
+import type { TailorAnswer, TailorQuestion } from '@/lib/llm';
+import { matchCandidateFact, withFactDrafts } from '@/lib/candidate-facts';
 import {
   generateCoverLetterDraft,
   generateTailoredDraft,
+  reviseTailoredDraft,
   runGapAnalysis,
+  saveCoverLetter,
+  saveResumeDraftOutput,
   saveTailorAnswers,
 } from '@/lib/resume-actions';
+import { normalizeCoverLetterBody } from '@/lib/cover-letter';
 import { MarkAppliedButton } from './MarkAppliedButton';
 import { ApplicationStageSelect } from './ApplicationStageSelect';
 import { DismissJobButton } from './DismissJobButton';
+import { PlainTextResumePreview } from './PlainTextResumePreview';
+import { CoverLetterPreview } from './CoverLetterPreview';
 
 type Props = {
   job: TailorJobView;
@@ -23,6 +30,150 @@ type Props = {
   backHref?: string;
   applicationStage?: ApplicationStage;
 };
+
+const QUICK_CHIPS = ['Yes', 'No', 'Not really', 'Skip'];
+
+function displayQuestion(text: string): string {
+  const cleaned = text.replace(/\s+/g, ' ').trim();
+  if (cleaned.length <= 180) return cleaned;
+  const sentences = (cleaned.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [cleaned])
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const withMark = sentences.filter((s) => s.includes('?'));
+  const pick = withMark[withMark.length - 1] ?? sentences[sentences.length - 1] ?? cleaned;
+  return pick.length <= 220 ? pick : `${pick.slice(0, 200).replace(/\s+\S*$/, '')}…`;
+}
+
+function QuestionField({
+  index,
+  total,
+  question,
+  value,
+  onChange,
+}: {
+  index: number;
+  total: number;
+  question: TailorQuestion;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const factAnswer = matchCandidateFact(question)?.answer;
+  const usingNotes = Boolean(factAnswer && value === factAnswer);
+  const chips: string[] = [];
+  if (factAnswer) chips.push('Project notes');
+  for (const chip of [...QUICK_CHIPS, ...(question.suggested_answers ?? [])]) {
+    if (!chips.some((existing) => existing.toLowerCase() === chip.toLowerCase())) {
+      chips.push(chip);
+    }
+  }
+
+  return (
+    <div className="space-y-1.5 border-t border-zinc-800 pt-3 first:border-0 first:pt-0">
+      <p className="text-sm font-medium leading-snug text-zinc-200">
+        {total > 1 ? <span className="mr-1.5 text-zinc-500">{index + 1}.</span> : null}
+        {displayQuestion(question.question)}
+      </p>
+      {usingNotes ? (
+        <p className="text-xs text-emerald-400/90">
+          Drafted from your project notes. Edit anything that&apos;s off.
+        </p>
+      ) : null}
+      <div className="flex flex-wrap gap-1.5">
+        {chips.slice(0, 6).map((chip) => (
+          <button
+            key={chip}
+            type="button"
+            onClick={() => {
+              if (chip === 'Project notes' && factAnswer) onChange(factAnswer);
+              else onChange(chip === 'Skip' ? 'n/a' : chip);
+            }}
+            className={`rounded-full border px-2.5 py-0.5 text-xs ${
+              chip === 'Project notes'
+                ? usingNotes
+                  ? 'border-amber-500/50 text-amber-200'
+                  : 'border-zinc-700 text-zinc-400 hover:border-amber-500/40 hover:text-amber-200'
+                : (chip === 'Skip' ? value === 'n/a' : value === chip)
+                  ? 'border-amber-500/50 text-amber-200'
+                  : 'border-zinc-700 text-zinc-400 hover:border-amber-500/40 hover:text-amber-200'
+            }`}
+          >
+            {chip}
+          </button>
+        ))}
+      </div>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={usingNotes || value.length > 160 ? 5 : 2}
+        placeholder="Short answer is enough"
+        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-100"
+      />
+    </div>
+  );
+}
+
+function DraftRevisionPanel({
+  docLabel,
+  pending,
+  disabled,
+  onRevise,
+}: {
+  docLabel: 'resume' | 'cover letter';
+  pending: boolean;
+  disabled: boolean;
+  onRevise: (notes: string) => void;
+}) {
+  const [notes, setNotes] = useState('');
+
+  return (
+    <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
+      <label className="block text-sm font-medium text-zinc-200" htmlFor={`revise-${docLabel}`}>
+        Anything you want changed?
+      </label>
+      <p className="text-xs text-zinc-500">
+        Optional for small edits in the preview above. Use this when you want a broader rerun — tone,
+        emphasis, swapping examples, or restructuring sections.
+      </p>
+      <textarea
+        id={`revise-${docLabel}`}
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        onKeyDown={(e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+            e.preventDefault();
+            const trimmed = notes.trim();
+            if (trimmed) {
+              onRevise(trimmed);
+              setNotes('');
+            }
+          }
+        }}
+        rows={3}
+        maxLength={1500}
+        placeholder={
+          docLabel === 'resume'
+            ? 'e.g. Lead with the NFL project, cut Process Engineer, make the profile less sales-heavy…'
+            : 'e.g. Shorter opening, mention DraftDNA, less formal tone…'
+        }
+        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-100"
+        disabled={disabled}
+      />
+      <button
+        type="button"
+        onClick={() => {
+          const trimmed = notes.trim();
+          if (!trimmed) return;
+          onRevise(trimmed);
+          setNotes('');
+        }}
+        disabled={disabled || pending || !notes.trim()}
+        className="rounded-lg border border-amber-500/40 px-4 py-2 text-sm font-medium text-amber-300 hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {pending ? 'Regenerating…' : `Regenerate ${docLabel} with changes`}
+      </button>
+    </div>
+  );
+}
 
 function KeywordPills({ label, terms, tone }: { label: string; terms: string[]; tone: string }) {
   if (!terms.length) return null;
@@ -51,15 +202,19 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
   const [answers, setAnswers] = useState<Record<string, string>>(() => {
     const map: Record<string, string> = {};
     for (const a of initialSession.answers ?? []) map[a.question_id] = a.answer;
-    return map;
+    return withFactDrafts(initialSession.questions ?? [], map);
   });
   const [output, setOutput] = useState(initialSession.output_text ?? '');
-  const [coverLetterOutput, setCoverLetterOutput] = useState(initialSession.cover_letter_text ?? '');
+  const [coverLetterOutput, setCoverLetterOutput] = useState(
+    initialSession.cover_letter_text ? normalizeCoverLetterBody(initialSession.cover_letter_text) : ''
+  );
   const [draftView, setDraftView] = useState<'resume' | 'cover-letter'>('resume');
   const [extraContext, setExtraContext] = useState(initialSession.extra_context ?? '');
   const [pagePreference, setPagePreference] = useState<'one' | 'two'>(
     initialSession.page_preference ?? 'one'
   );
+  const [coverSaving, setCoverSaving] = useState(false);
+  const [coverSaved, setCoverSaved] = useState(false);
 
   const kw = session.keyword_analysis ?? { matched: [], partial: [], missing: [] };
   const gap = session.gap_analysis && 'summary' in session.gap_analysis ? session.gap_analysis : null;
@@ -78,7 +233,7 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
         const result = await runGapAnalysis(session.id);
         const prefilled: Record<string, string> = {};
         for (const a of result.answers ?? []) prefilled[a.question_id] = a.answer;
-        setAnswers((prev) => ({ ...prev, ...prefilled }));
+        setAnswers((prev) => withFactDrafts(result.questions, { ...prev, ...prefilled }));
         setReusedCount(result.reusedCount ?? 0);
         setSession((s) => ({
           ...s,
@@ -112,7 +267,9 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
         await saveTailorAnswers(session.id, payload, extraContext);
         const result = await generateTailoredDraft(session.id, extraContext, pagePreference);
         setOutput(result.output_text);
-        setCoverLetterOutput(result.cover_letter_text);
+        setCoverLetterOutput(
+          result.cover_letter_text ? normalizeCoverLetterBody(result.cover_letter_text) : ''
+        );
         setSession((s) => ({
           ...s,
           status: 'done',
@@ -132,12 +289,71 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
     startTransition(async () => {
       try {
         const result = await generateCoverLetterDraft(session.id, extraContext);
-        setCoverLetterOutput(result.cover_letter_text);
+        setCoverLetterOutput(normalizeCoverLetterBody(result.cover_letter_text));
         setSession((s) => ({ ...s, cover_letter_text: result.cover_letter_text }));
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Cover letter generation failed');
       }
     });
+  }
+
+  function handleReviseDraft(notes: string) {
+    setError(null);
+    const target = draftView === 'cover-letter' ? 'cover-letter' : 'resume';
+
+    startTransition(async () => {
+      try {
+        if (target === 'resume' && output) {
+          await saveResumeDraftOutput(session.id, output);
+        }
+        if (target === 'cover-letter' && coverLetterOutput) {
+          await saveCoverLetter(session.id, coverLetterOutput);
+        }
+
+        const result = await reviseTailoredDraft(
+          session.id,
+          notes,
+          target,
+          output,
+          coverLetterOutput
+        );
+
+        if (target === 'resume') {
+          setOutput(result.output_text);
+        }
+        if (target === 'cover-letter') {
+          setCoverLetterOutput(normalizeCoverLetterBody(result.cover_letter_text ?? ''));
+        }
+        setSession((s) => ({
+          ...s,
+          status: 'done',
+          output_text: result.output_text,
+          cover_letter_text: result.cover_letter_text ?? s.cover_letter_text,
+        }));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Revision failed');
+      }
+    });
+  }
+
+  function handleCoverLetterChange(body: string) {
+    const next = normalizeCoverLetterBody(body);
+    setCoverLetterOutput(next);
+    setCoverSaving(true);
+    setCoverSaved(false);
+    window.setTimeout(() => {
+      startTransition(async () => {
+        try {
+          await saveCoverLetter(session.id, next);
+          setCoverSaved(true);
+          window.setTimeout(() => setCoverSaved(false), 1500);
+        } catch (e) {
+          setError(e instanceof Error ? e.message : 'Failed to save cover letter');
+        } finally {
+          setCoverSaving(false);
+        }
+      });
+    }, 700);
   }
 
   return (
@@ -238,11 +454,11 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
             )}
           </section>
 
-          <section className="space-y-5 rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
+          <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
             <div>
               <h2 className="text-lg font-semibold text-zinc-100">Clarifying questions</h2>
               <p className="mt-1 text-sm text-zinc-500">
-                Your answers are saved for future applications — similar jobs won&apos;t re-ask them.
+                Short answers are saved and reused. We only ask what&apos;s new for this role.
               </p>
               {reusedCount > 0 && (
                 <p className="mt-2 text-xs text-emerald-400/90">
@@ -255,49 +471,31 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
                 No new questions for this role — your saved answers cover it. Add optional context below and generate.
               </p>
             ) : (
-              questions.map((q) => (
-              <div key={q.id} className="space-y-2 border-t border-zinc-800 pt-4 first:border-0 first:pt-0">
-                <p className="text-sm font-medium text-zinc-200">{q.question}</p>
-                <p className="text-xs text-zinc-500">{q.context}</p>
-                {q.suggested_answers && q.suggested_answers.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {q.suggested_answers.map((s) => (
-                      <button
-                        key={s}
-                        type="button"
-                        onClick={() => setAnswers((prev) => ({ ...prev, [q.id]: s }))}
-                        className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-400 hover:border-amber-500/40 hover:text-amber-200"
-                      >
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <textarea
+              questions.map((q, i) => (
+                <QuestionField
+                  key={q.id}
+                  index={i}
+                  total={questions.length}
+                  question={q}
                   value={answers[q.id] ?? ''}
-                  onChange={(e) => setAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
-                  rows={3}
-                  placeholder="Your honest answer…"
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+                  onChange={(value) => setAnswers((prev) => ({ ...prev, [q.id]: value }))}
                 />
-              </div>
               ))
             )}
-            <div className="space-y-2 border-t border-zinc-800 pt-5">
+            <div className="space-y-1.5 border-t border-zinc-800 pt-4">
               <label className="block text-sm font-medium text-zinc-200" htmlFor="extra-context">
                 Anything else we should know?
               </label>
               <p className="text-xs text-zinc-500">
-                Why this role, career pivot story, related interests, or context that doesn&apos;t fit the questions above.
-                Especially useful when the fit is a stretch — we&apos;ll lean on this for your Profile section.
+                Optional. Why this role, a pivot story, or anything that doesn&apos;t fit above.
               </p>
               <textarea
                 id="extra-context"
                 value={extraContext}
                 onChange={(e) => setExtraContext(e.target.value)}
-                rows={4}
-                placeholder="e.g. I've always been passionate about aviation, I'm pursuing my PPL, my leadership in X translates to…"
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+                rows={3}
+                placeholder="e.g. I'm pursuing my PPL, my leadership in X translates to…"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-100"
               />
             </div>
             <div className="space-y-2">
@@ -387,17 +585,27 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
               </div>
             )}
           </div>
-          <pre className="max-h-[32rem] overflow-auto whitespace-pre-wrap rounded-lg border border-zinc-800 bg-zinc-950 p-4 font-mono text-sm leading-relaxed text-zinc-300">
-            {draftView === 'resume' ? (
-              output
-            ) : coverLetterOutput ? (
-              coverLetterOutput
-            ) : (
-              <span className="text-zinc-500">
-                No cover letter yet for this session.
-              </span>
-            )}
-          </pre>
+          {draftView === 'resume' ? (
+            <PlainTextResumePreview text={output} />
+          ) : coverLetterOutput ? (
+            <div className="space-y-2">
+              {(coverSaving || coverSaved) && (
+                <p className="text-xs text-zinc-500">
+                  {coverSaving ? 'Saving…' : 'Saved'}
+                </p>
+              )}
+              <CoverLetterPreview
+                body={coverLetterOutput}
+                onChange={handleCoverLetterChange}
+                saving={coverSaving}
+                saved={coverSaved}
+              />
+            </div>
+          ) : (
+            <p className="rounded-lg border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-500">
+              No cover letter yet for this session.
+            </p>
+          )}
           {draftView === 'cover-letter' && !coverLetterOutput && (
             <button
               type="button"
@@ -407,6 +615,15 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
             >
               {pending ? 'Generating…' : 'Generate cover letter'}
             </button>
+          )}
+          {((draftView === 'resume' && output) ||
+            (draftView === 'cover-letter' && coverLetterOutput)) && (
+            <DraftRevisionPanel
+              docLabel={draftView === 'cover-letter' ? 'cover letter' : 'resume'}
+              pending={pending}
+              disabled={pending}
+              onRevise={handleReviseDraft}
+            />
           )}
           <div className="flex flex-wrap items-center gap-3 border-t border-zinc-800 pt-4">
             {applicationStage ? (

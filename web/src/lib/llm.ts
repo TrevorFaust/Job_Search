@@ -5,6 +5,7 @@ import {
   stripResumeBulletPrefixes,
   type ResumeFormatMeta,
 } from './resume-structure';
+import { CANDIDATE_FACTS } from './candidate-facts';
 import { normalizeFitScore } from './fit-level';
 import type { FitLevel } from './fit-level';
 
@@ -51,6 +52,15 @@ export type GenerateOptions = {
   extraContext?: string;
   pageLength?: 'one' | 'two';
   formatMeta?: ResumeFormatMeta;
+  /** Prior resume draft text when revising with notes. */
+  previousOutput?: string;
+  revisionNotes?: string;
+};
+
+export type CoverLetterOptions = {
+  extraContext?: string;
+  previousBody?: string;
+  revisionNotes?: string;
 };
 
 export type InterviewQuestionCategory =
@@ -170,14 +180,17 @@ PHASE 1 — Discovery (you are in this phase now)
 
 Compare the job posting to the candidate's resume. Do NOT rewrite the resume yet.
 
-Ask targeted clarifying questions (3–5 ideal; up to 7 if needed). Questions should:
-- Identify gaps the candidate might fill with unlisted or adjacent experience
-- Surface context bullets can't convey (team size, outcomes, scale)
-- Probe transferable angles ("This role emphasizes X — have you done a version of this?")
-- Flag missing JD keywords and ask if relevant experience exists but isn't documented
-- Explore career narrative (pivot, step up, lateral — how should we frame it?)
+Ask clarifying questions only when a fact is missing from the resume AND prior_answers. Default to 0–2 questions. Never more than 3.
 
-Keep questions conversational, not clinical.
+Each question must be ONE short sentence (under 140 characters). No preamble, no coaching, no examples, no "walk me through".
+Good: "Have you used Figma, even for a mockup or tutorial?"
+Bad: a paragraph that explains the job, then asks.
+
+Only ask about this posting's unique gaps (a named tool, license, location constraint, or metric not already covered). Do NOT re-ask career narrative, motivation, "why this role", availability vs current job, or generic data/SQL/pipeline/design questions if prior_answers already touch that topic.
+
+suggested_answers: 2–4 chips, each 1–4 words (Yes, No, Adjacent experience).
+Zero questions is the correct output when prior_answers already cover the gaps.
+If known_project_details cover a topic, you may still ask a short question; a draft answer will be prefilled for review. Do not contradict those notes.
 ${VOICE_RULES}
 
 Other rules:
@@ -185,7 +198,7 @@ Other rules:
 - Note honest reframing angles even for stretch roles.
 - Set fit_level: strong | moderate | stretch | long_shot.
 - Set fit_score: a number from 0.0 to 10.0 (one decimal place, any tenth is allowed) for how likely the candidate is to get this job with a well-tailored resume. Rough guide: 0.0 = absurd long shot (e.g. CEO of an unrelated company); ~3–4 = long_shot; ~5–6 = stretch; ~7–8 = moderate; ~9–10 = strong / possibly overqualified — if they apply they should get it. Align score with fit_level but use the decimal to differentiate within a band.
-- If prior_answers are provided, do NOT re-ask similar questions.
+- If prior_answers are provided, do NOT re-ask similar questions even if the wording would be different.
 - Respond with a single JSON object only — no markdown fences.`;
 
 const GENERATE_SYSTEM = `You are an expert resume writer and career strategist with 15+ years of experience tailoring resumes for competitive roles.
@@ -227,6 +240,51 @@ Output format:
 1. Full resume text (sections + plain accomplishment lines, no bullet prefixes) — this is what the candidate copies into their template.
 2. Blank line, then "Keyword Alignment" section listing 5–8 JD terms with Yes / Partial / Gap.`;
 
+const REVISE_GENERATE_SYSTEM = `You revise an existing tailored resume based on the candidate's feedback.
+
+PHASE 2 — Revision (you are in this phase now)
+
+- Start from current_draft. Apply ONLY the requested changes — do not rewrite from scratch unless they asked.
+- Keep sections, roles, and wording that still work. Preserve one-page density unless they ask to shorten or expand.
+- NEVER invent employers, titles, dates, degrees, certifications, metrics, or skills.
+- If a requested change would require invented experience, keep the original wording for that part.
+- Same formatting rules as a fresh tailored resume: no bullet characters on accomplishment lines, mirror original structure, no markdown fences or commentary.
+- End with a Keyword Alignment section listing 5–8 JD terms with Yes / Partial / Gap.
+
+Output the full revised resume text only.`;
+
+const MAX_CLARIFYING_QUESTIONS = 3;
+const MAX_QUESTION_CHARS = 180;
+
+function compactPriorAnswers(priorAnswers: TailorAnswer[]) {
+  return priorAnswers.slice(0, 50).map((a) => ({
+    topic: (a.related_requirement || a.question || '').slice(0, 140),
+    answer: a.answer.slice(0, 220),
+  }));
+}
+
+function compactClarifyingQuestion(text: string): string {
+  const cleaned = text.replace(/\s+/g, ' ').trim();
+  if (!cleaned || cleaned.length <= MAX_QUESTION_CHARS) return cleaned;
+
+  const sentences = (cleaned.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [cleaned])
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const withMark = sentences.filter((s) => s.includes('?'));
+  const pick = withMark[withMark.length - 1] ?? sentences[sentences.length - 1] ?? cleaned;
+  if (pick.length <= 220) return pick;
+  return `${pick.slice(0, 200).replace(/\s+\S*$/, '')}…`;
+}
+
+function compactSuggestedAnswers(answers: string[] | undefined): string[] | undefined {
+  const chips = (answers ?? [])
+    .map((s) => s.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .map((s) => (s.length > 40 ? `${s.slice(0, 37).trim()}…` : s))
+    .slice(0, 4);
+  return chips.length ? chips : undefined;
+}
+
 export async function analyzeResumeForJob(
   resumeText: string,
   job: { title: string; company: string | null; description: string },
@@ -239,10 +297,10 @@ export async function analyzeResumeForJob(
       description: job.description.slice(0, 12000),
     },
     resume: resumeText.slice(0, 12000),
-    prior_answers: priorAnswers.map((a) => ({
-      question: a.question ?? a.question_id,
-      answer: a.answer,
-      related_requirement: a.related_requirement ?? '',
+    prior_answers: compactPriorAnswers(priorAnswers),
+    known_project_details: CANDIDATE_FACTS.map((f) => ({
+      topic: f.id,
+      answer: f.answer,
     })),
     output_schema: {
       gap_analysis: {
@@ -258,10 +316,10 @@ export async function analyzeResumeForJob(
       questions: [
         {
           id: 'q1',
-          question: 'string (address reader as "you")',
-          context: 'string (use "you")',
+          question: 'one short sentence, under 140 characters, address reader as "you"',
+          context: 'omit or one short clause',
           related_requirement: 'string',
-          suggested_answers: ['optional'],
+          suggested_answers: ['Yes', 'No'],
         },
       ],
     },
@@ -269,7 +327,7 @@ export async function analyzeResumeForJob(
 
   const raw = await claudeText(
     ANALYZE_SYSTEM,
-    `Analyze this resume against the job. Return JSON with gap_analysis and 3–7 new questions.\n\n${userPrompt}`
+    `Analyze this resume against the job. Return JSON with gap_analysis and 0–3 short new questions (0 if prior_answers already cover it).\n\n${userPrompt}`
   );
 
   const parsed = parseJsonResponse<{ gap_analysis: GapAnalysis; questions: TailorQuestion[] }>(raw);
@@ -292,11 +350,12 @@ export async function analyzeResumeForJob(
         reframe_suggestion: directVoice(m.reframe_suggestion, resumeText),
       })),
     },
-    questions: (parsed.questions ?? []).slice(0, 7).map((q, i) => ({
+    questions: (parsed.questions ?? []).slice(0, MAX_CLARIFYING_QUESTIONS).map((q, i) => ({
       ...q,
       id: q.id || `q${i + 1}`,
-      question: directVoice(q.question, resumeText),
-      context: directVoice(q.context, resumeText),
+      question: compactClarifyingQuestion(directVoice(q.question, resumeText)),
+      context: '',
+      suggested_answers: compactSuggestedAnswers(q.suggested_answers),
     })),
   };
 }
@@ -310,6 +369,7 @@ export async function generateTailoredResume(
 ): Promise<string> {
   const formatMeta = options.formatMeta ?? extractResumeStructure(resumeText);
   const pageLength = options.pageLength ?? 'one';
+  const revising = !!(options.revisionNotes?.trim() && options.previousOutput?.trim());
 
   const user = [
     `Job title: ${job.title}`,
@@ -334,10 +394,22 @@ export async function generateTailoredResume(
     'Additional context from the candidate:',
     options.extraContext?.trim() || '(none provided)',
     '',
-    'Write the tailored ONE-PAGE resume now (unless page_length is two). Curate for relevance — omit unrelated jobs. Fill the page by expanding relevant roles, not by adding back low-relevance jobs. No bullet characters on accomplishment lines. Mirror original_structure. Output the full resume — never refuse.',
+    ...(revising
+      ? [
+          'Current tailored draft (revise this — do not start over unless asked):',
+          options.previousOutput!.trim().slice(0, 12000),
+          '',
+          'Revision notes from the candidate:',
+          options.revisionNotes!.trim().slice(0, 1500),
+          '',
+          'Revise the current draft per the notes. Output the full updated resume only.',
+        ]
+      : [
+          'Write the tailored ONE-PAGE resume now (unless page_length is two). Curate for relevance — omit unrelated jobs. Fill the page by expanding relevant roles, not by adding back low-relevance jobs. No bullet characters on accomplishment lines. Mirror original_structure. Output the full resume — never refuse.',
+        ]),
   ].join('\n');
 
-  const text = await claudeText(GENERATE_SYSTEM, user, 12000);
+  const text = await claudeText(revising ? REVISE_GENERATE_SYSTEM : GENERATE_SYSTEM, user, 12000);
   if (!text) throw new Error('Empty response from AI');
   return stripResumeBulletPrefixes(text);
 }
@@ -365,6 +437,17 @@ Rules:
 - Do NOT add markdown, code fences, commentary, or notes after the letter.
 - Output the complete letter text only — ready to copy or print.`;
 
+const REVISE_COVER_LETTER_SYSTEM = `You revise an existing cover letter based on the candidate's feedback.
+
+The candidate already has a draft they mostly like. Apply their revision notes while keeping factual accuracy and first-person voice.
+
+Rules:
+- Start from current_draft. Apply ONLY the requested tweaks — do not rewrite from scratch unless they asked.
+- Same formatting rules as the original cover letter.
+- NEVER invent employers, projects, degrees, or skills.
+- NEVER apologize for gaps or missing requirements.
+- Output the complete revised letter text only.`;
+
 function compactCoverLetterContext(gap: GapAnalysis) {
   return {
     summary: gap.summary,
@@ -383,8 +466,9 @@ export async function generateCoverLetter(
   job: { title: string; company: string | null; description: string },
   gapAnalysis: GapAnalysis,
   answers: TailorAnswer[],
-  options: Pick<GenerateOptions, 'extraContext'> = {}
+  options: CoverLetterOptions = {}
 ): Promise<string> {
+  const revising = !!(options.revisionNotes?.trim() && options.previousBody?.trim());
   const user = [
     `Job title: ${job.title}`,
     `Company: ${job.company ?? 'Unknown'}`,
@@ -404,10 +488,26 @@ export async function generateCoverLetter(
     'Additional context from the candidate:',
     options.extraContext?.trim() || '(none provided)',
     '',
-    'Write the one-page cover letter now. Confident tone throughout — no disclaimers about missing skills. Extract name and contact from the resume for the header.',
+    ...(revising
+      ? [
+          'Current cover letter draft:',
+          options.previousBody!.trim().slice(0, 6000),
+          '',
+          'Revision notes from the candidate:',
+          options.revisionNotes!.trim().slice(0, 1500),
+          '',
+          'Revise the letter per the notes. Keep letterhead/contact formatting consistent.',
+        ]
+      : [
+          'Write the one-page cover letter now. Confident tone throughout — no disclaimers about missing skills. Extract name and contact from the resume for the header.',
+        ]),
   ].join('\n');
 
-  const text = await claudeText(COVER_LETTER_SYSTEM, user, 4096);
+  const text = await claudeText(
+    revising ? REVISE_COVER_LETTER_SYSTEM : COVER_LETTER_SYSTEM,
+    user,
+    4096
+  );
   if (!text) throw new Error('Empty cover letter response from AI');
   return text.trim();
 }

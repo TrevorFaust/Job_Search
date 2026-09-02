@@ -1,5 +1,5 @@
 import { getDb } from './supabase';
-import { applyJobFiltersAsync, paginate, sortJobs, BOARD_MAX_JOBS, type JobFilters } from './filters';
+import { applyJobFiltersAsync, paginate, sortJobs, BOARD_SCAN_LIMIT, type JobFilters } from './filters';
 import { filterByCategories } from './categories';
 import { parseFitLevel, parseFitScore } from './fit-level';
 import { hydrateFitLevels } from './job-fit';
@@ -120,7 +120,7 @@ export async function getAppliedJobs(
 ): Promise<PaginatedJobs> {
   const jobs: JobView[] = [];
   const batchSize = 1000;
-  const max = BOARD_MAX_JOBS;
+  const max = Math.min(BOARD_SCAN_LIMIT, 2_000);
 
   while (jobs.length < max) {
     const from = jobs.length;
@@ -171,13 +171,13 @@ export async function getAppliedJobs(
     if (data.length < batchSize) break;
   }
 
-  const withFitLevels = await hydrateFitLevels(subscriberId, jobs);
-
-  let filtered = filterBySearch(withFitLevels, q);
+  let filtered = filterBySearch(jobs, q);
   if (filters) filtered = await applyJobFiltersAsync(filtered, filters);
   if (filters?.categories.length) filtered = filterByCategories(filtered, filters.categories);
   filtered = sortJobs(filtered, sort, { pinSpecial: false });
-  return toPaginated(filtered, page);
+  const paginated = toPaginated(filtered, page);
+  paginated.jobs = await hydrateFitLevels(subscriberId, paginated.jobs);
+  return paginated;
 }
 
 export async function getApplicationForJob(subscriberId: string, jobId: number) {
