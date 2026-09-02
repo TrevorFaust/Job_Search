@@ -1,4 +1,4 @@
-import { extractSalaryFromText } from '../../lib/salary.js';
+import { extractSalaryFromText } from '../../../lib/salary.js';
 import { stripHtml, truncateDescription, USER_AGENT } from '../utils.js';
 
 function parseRelativePosted(text) {
