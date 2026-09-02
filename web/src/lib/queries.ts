@@ -596,18 +596,23 @@ export async function getAllJobs(
   };
 }
 
-export async function getPriorityJobIds(): Promise<number[]> {
+export async function getPriorityJobIds(excludeJobIds?: Set<number>): Promise<number[]> {
   const ids: number[] = [];
   const batchSize = 1000;
   let offset = 0;
   while (true) {
-    const { data, error } = await getDb()
+    let query = getDb()
       .from('jobs')
       .select('id')
       .eq('status', 'active')
       .eq('is_special', true)
-      .order('id', { ascending: false })
-      .range(offset, offset + batchSize - 1);
+      .order('id', { ascending: false });
+
+    if (excludeJobIds?.size) {
+      query = query.not('id', 'in', `(${[...excludeJobIds].join(',')})`);
+    }
+
+    const { data, error } = await query.range(offset, offset + batchSize - 1);
     if (error) throw error;
     if (!data?.length) break;
     for (const row of data) ids.push(row.id as number);

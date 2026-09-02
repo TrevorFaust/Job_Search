@@ -89,7 +89,8 @@ export async function fetchBoardPayload(
               ? { excludeSpecial: true }
               : undefined
         ),
-    getPriorityJobIds(),
+    // Match Priority tab visibility: don't count applied/dismissed jobs the user can never open here.
+    getPriorityJobIds(boardExclusions?.scrapedIds),
   ]);
 
   return {
