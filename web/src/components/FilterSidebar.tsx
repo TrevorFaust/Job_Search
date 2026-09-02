@@ -39,6 +39,12 @@ export function FilterSidebar({ filters, view, stage, sort, q }: Props) {
         {view === 'applied' && stage && <input type="hidden" name="stage" value={stage} />}
         {sort !== 'date' && <input type="hidden" name="sort" value={sort} />}
         {q && <input type="hidden" name="q" value={q} />}
+        {view === 'priority' && filters.priorityOrg && (
+          <input type="hidden" name="org" value={filters.priorityOrg} />
+        )}
+        {view === 'priority' && filters.priorityPlace && (
+          <input type="hidden" name="place" value={filters.priorityPlace} />
+        )}
 
         <label className="block text-sm">
           <span className="text-zinc-400">Posted within</span>

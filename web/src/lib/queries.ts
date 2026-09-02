@@ -15,6 +15,7 @@ import type { FitLevel } from './fit-level';
 import type { ManualJob } from './manual-jobs';
 import { hydrateFitLevels } from './job-fit';
 import { manualJobToBoardView } from './manual-jobs';
+import { jobOrganization, jobPlace, uniqueSortedLabels } from './priority-jobs';
 
 export type SortKey = 'date' | 'date_asc' | 'salary_high' | 'salary_low';
 
@@ -69,6 +70,7 @@ export type JobView = Job & {
   application_stage?: ApplicationStage;
   applied_at?: string;
   interview_prep?: Record<string, unknown>;
+  follow_up_contacts?: Record<string, unknown>;
   fit_level?: FitLevel;
   fit_score?: number;
   fit_estimated?: boolean;
@@ -502,6 +504,20 @@ async function getAllJobsMemoryScan(
       jobs = filterByCategories(jobs, filters.categories);
     }
   }
+
+  let organizations: string[] | undefined;
+  let locations: string[] | undefined;
+  if (options?.specialOnly) {
+    organizations = uniqueSortedLabels(jobs.map(jobOrganization));
+    locations = uniqueSortedLabels(jobs.map(jobPlace));
+    if (filters?.priorityOrg) {
+      jobs = jobs.filter((job) => jobOrganization(job) === filters.priorityOrg);
+    }
+    if (filters?.priorityPlace) {
+      jobs = jobs.filter((job) => jobPlace(job) === filters.priorityPlace);
+    }
+  }
+
   jobs = sortJobs(jobs, sort, { pinSpecial: false });
   const paginated = toPaginated(jobs, page);
   if (!includeDescription) {
@@ -510,7 +526,7 @@ async function getAllJobsMemoryScan(
   if (subscriberId) {
     paginated.jobs = await hydrateFitLevels(subscriberId, paginated.jobs);
   }
-  return paginated;
+  return { ...paginated, organizations, locations };
 }
 
 /** Active jobs on the board (status=active, within 6-week retention window). */
@@ -524,7 +540,7 @@ export async function getAllJobs(
   excludeManualJobIds?: Set<string>,
   options?: FetchBoardJobsOptions
 ): Promise<PaginatedJobs> {
-  if (needsMemoryBoardScan(filters)) {
+  if (needsMemoryBoardScan(filters) || options?.specialOnly) {
     return getAllJobsMemoryScan(
       sort,
       page,

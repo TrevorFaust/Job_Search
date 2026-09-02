@@ -24,9 +24,16 @@ import { MarkAppliedButton } from './MarkAppliedButton';
 import { Pagination } from './Pagination';
 import type { StoredInterviewPrep } from '@/lib/interview-actions';
 import { usePrioritySeen } from '@/lib/priority-seen';
+import { prioritySourceMeta } from '@/lib/priority-jobs';
+import { isStoredFollowUpContacts } from '@/lib/follow-up-utils';
 import Link from 'next/link';
-import { Suspense } from 'react';
+import { Fragment, Suspense } from 'react';
 import { PersistBoardFilters } from './PersistBoardFilters';
+import {
+  FollowUpContactsExpanded,
+  FollowUpContactsProvider,
+  FollowUpContactsTrigger,
+} from './FollowUpContactsPanel';
 
 type BoardView = 'all' | 'preferred' | 'priority' | 'applied';
 
@@ -42,6 +49,8 @@ type Props = {
   filters: JobFilters;
   signedIn: boolean;
   priorityJobIds?: number[];
+  organizations?: string[];
+  locations?: string[];
 };
 
 const BOARD_VIEWS: { id: BoardView; label: string; signedInOnly?: boolean }[] = [
@@ -98,6 +107,12 @@ function parseStoredInterviewPrep(value: unknown): StoredInterviewPrep | null {
   return value as StoredInterviewPrep;
 }
 
+function parseStoredFollowUpContacts(value: unknown) {
+  return isStoredFollowUpContacts(value) ? value : null;
+}
+
+const FOLLOW_UP_STAGES: ApplicationStage[] = ['applied', 'interviewing', 'offered'];
+
 export function JobBoard({
   jobs,
   total,
@@ -110,12 +125,24 @@ export function JobBoard({
   filters,
   signedIn,
   priorityJobIds = [],
+  organizations = [],
+  locations = [],
 }: Props) {
   const pagePriorityIds = jobs.filter((j) => j.is_special && !j.isManual).map((j) => j.id);
-  const { newCount } = usePrioritySeen(view, pagePriorityIds, priorityJobIds);
+  const { ready: seenReady, newCount, sessionUnseen } = usePrioritySeen(
+    view,
+    pagePriorityIds,
+    priorityJobIds
+  );
 
   function hrefFor(
-    overrides: { view?: BoardView; stage?: ApplicationStage | ''; sort?: string; q?: string; page?: number } = {}
+    overrides: {
+      view?: BoardView;
+      stage?: ApplicationStage | '';
+      sort?: string;
+      q?: string;
+      page?: number;
+    } = {}
   ) {
     const pick = <T,>(key: keyof typeof overrides, fallback: T): T =>
       key in overrides ? (overrides[key] as T) : fallback;
@@ -199,25 +226,105 @@ export function JobBoard({
         </form>
 
         <div className="flex flex-wrap gap-2">
-          {BOARD_VIEWS.filter((v) => !v.signedInOnly || signedIn).map((v) => (
-            <a
-              key={v.id}
-              href={hrefFor({ view: v.id, stage: '', page: 1 })}
-              className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
-                view === v.id
-                  ? 'bg-amber-400 text-zinc-950'
-                  : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-              }`}
-            >
-              {v.label}
-              {v.id === 'priority' && newCount > 0 && view !== 'priority' ? (
-                <span className="ml-1.5 rounded-full bg-amber-300/30 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">
-                  {newCount} new
-                </span>
-              ) : null}
-            </a>
-          ))}
+          {BOARD_VIEWS.filter((v) => !v.signedInOnly || signedIn).map((v) => {
+            const showNew = v.id === 'priority' && seenReady && newCount > 0;
+            return (
+              <a
+                key={v.id}
+                href={hrefFor({ view: v.id, stage: '', page: 1 })}
+                aria-label={
+                  v.id === 'priority' && showNew
+                    ? `Priority, ${newCount} new ${newCount === 1 ? 'job' : 'jobs'}`
+                    : v.label
+                }
+                className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium transition ${
+                  view === v.id
+                    ? 'bg-amber-400 text-zinc-950'
+                    : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                }`}
+              >
+                {v.label}
+                {showNew ? (
+                  <span
+                    className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-bold tabular-nums ${
+                      view === v.id
+                        ? 'bg-zinc-950 text-amber-300'
+                        : 'bg-amber-400 text-zinc-950'
+                    }`}
+                  >
+                    {newCount}
+                  </span>
+                ) : null}
+              </a>
+            );
+          })}
         </div>
+
+        {view === 'priority' && (organizations.length > 0 || locations.length > 0) && (
+          <form action="/" method="get" className="flex flex-wrap items-end gap-3 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
+            <input type="hidden" name="view" value="priority" />
+            {sort !== 'date' && <input type="hidden" name="sort" value={sort} />}
+            {q && <input type="hidden" name="q" value={q} />}
+            {filters.recencyDays != null && (
+              <input
+                type="hidden"
+                name="recency"
+                value={RECENCY_OPTIONS.find((o) => o.days === filters.recencyDays)?.id ?? ''}
+              />
+            )}
+            {organizations.length > 0 && (
+              <label className="text-sm">
+                <span className="mb-1 block text-zinc-500">Organization</span>
+                <select
+                  name="org"
+                  defaultValue={filters.priorityOrg ?? ''}
+                  className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+                >
+                  <option value="">All organizations</option>
+                  {organizations.map((org) => (
+                    <option key={org} value={org}>
+                      {org}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {locations.length > 0 && (
+              <label className="text-sm">
+                <span className="mb-1 block text-zinc-500">Location</span>
+                <select
+                  name="place"
+                  defaultValue={filters.priorityPlace ?? ''}
+                  className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+                >
+                  <option value="">All locations</option>
+                  {locations.map((place) => (
+                    <option key={place} value={place}>
+                      {place}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <button
+              type="submit"
+              className="rounded-lg bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 hover:bg-zinc-700"
+            >
+              Filter
+            </button>
+            {(filters.priorityOrg || filters.priorityPlace) && (
+              <a
+                href={buildBoardHref(
+                  { ...filters, priorityOrg: undefined, priorityPlace: undefined },
+                  { view: 'priority', sort, q }
+                )}
+                className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-500 hover:text-zinc-300"
+              >
+                Clear
+              </a>
+            )}
+          </form>
+        )}
 
         {signedIn && view === 'applied' && (
           <div className="flex flex-wrap gap-2">
@@ -273,8 +380,9 @@ export function JobBoard({
 
         {view === 'priority' && (
           <p className="text-sm text-zinc-500">
-            Watched / priority roles only. These stay off the All jobs tab so they don&apos;t clog the main feed.
-            Opening this tab marks currently listed roles as seen.
+            Watched / priority roles only — kept off All jobs. The badge counts jobs you haven&apos;t
+            scrolled onto yet; open each page to mark that page as seen (clicking the tab once won&apos;t
+            clear hundreds of jobs).
           </p>
         )}
 
@@ -316,9 +424,9 @@ export function JobBoard({
                 : view === 'preferred'
                   ? 'No jobs match your selected interest areas. Try enabling more categories or loosening other filters.'
                   : view === 'priority'
-                    ? q
-                      ? 'No priority jobs match this search. Clear search and try again.'
-                      : 'No priority jobs yet. Roles tagged as watched show up here once the scraper finds them.'
+                    ? filters.priorityOrg || filters.priorityPlace || q
+                      ? 'No priority jobs match these filters. Clear organization, location, or search and try again.'
+                      : 'No priority jobs yet. Roles tagged as watched show up here, newest first.'
                   : q
                   ? `No jobs matching "${q}". Try a broader keyword or loosen your filters.`
                   : 'No jobs in this view yet. Run the scraper or check back after the next daily pull.'}
@@ -332,19 +440,36 @@ export function JobBoard({
               const cardKey = job.isManual ? job.manual_job_id! : String(job.id);
               const showInterviewPrep =
                 signedIn && view === 'applied' && job.application_stage === 'interviewing';
+              const showFollowUpContacts =
+                signedIn &&
+                view === 'applied' &&
+                !!job.application_stage &&
+                FOLLOW_UP_STAGES.includes(job.application_stage);
+              const isNew = view === 'priority' && sessionUnseen.has(job.id);
+              const priorityMeta =
+                view === 'priority' ? prioritySourceMeta(job.source, job.company) : null;
 
               const article = (
-              <article key={cardKey} className="p-5 transition hover:bg-zinc-900">
+              <article
+                className={`p-5 transition hover:bg-zinc-900 ${
+                  isNew ? 'border-l-2 border-l-amber-400 bg-amber-400/[0.04]' : ''
+                }`}
+              >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
+                      {isNew ? (
+                        <span className="rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-zinc-950">
+                          New
+                        </span>
+                      ) : null}
                       <Link
                         href={jobHref(job)}
                         className="text-lg font-semibold text-zinc-50 hover:text-amber-300"
                       >
                         {job.title}
                       </Link>
-                      {job.is_special && (
+                      {job.is_special && view !== 'priority' && (
                         <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-300">
                           Priority
                         </span>
@@ -358,7 +483,7 @@ export function JobBoard({
                       )}
                     </div>
                     <p className="mt-1.5 text-sm font-medium text-zinc-300">
-                      {job.company ?? 'Unknown company'}
+                      {job.company ?? priorityMeta?.label ?? 'Unknown company'}
                       <span className="mx-2 text-zinc-600">·</span>
                       <span className="text-amber-400/90">
                         {view === 'applied' && job.applied_at
@@ -386,6 +511,16 @@ export function JobBoard({
                     <div className="font-mono text-sm text-emerald-400">{salaryDisplay(job)}</div>
                     {signedIn && (view === 'all' || view === 'preferred' || view === 'priority') && (
                       <div className="mt-2 flex flex-col items-end gap-1">
+                        {view === 'priority' && priorityMeta && (
+                          <a
+                            href={job.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs font-medium text-zinc-400 hover:text-amber-300"
+                          >
+                            {priorityMeta.externalCta}
+                          </a>
+                        )}
                         <a
                           href={tailorHref(job)}
                           className="text-xs font-medium text-amber-400 hover:text-amber-300"
@@ -418,6 +553,7 @@ export function JobBoard({
                         >
                           View resume & cover letter →
                         </a>
+                        {showFollowUpContacts && <FollowUpContactsTrigger variant="sidebar" />}
                         {job.application_stage === 'interviewing' && (
                           <InterviewPrepTrigger variant="sidebar" />
                         )}
@@ -441,22 +577,37 @@ export function JobBoard({
                     </Link>
                   );
                 })()}
+                {showFollowUpContacts && <FollowUpContactsExpanded variant="sidebar" />}
                 {showInterviewPrep && <InterviewPrepExpanded variant="sidebar" />}
               </article>
               );
 
-              return showInterviewPrep ? (
-                <InterviewPrepProvider
-                  key={cardKey}
-                  jobId={job.isManual ? undefined : job.id}
-                  manualJobId={job.manual_job_id}
-                  initialPrep={parseStoredInterviewPrep(job.interview_prep)}
-                >
-                  {article}
-                </InterviewPrepProvider>
-              ) : (
-                article
-              );
+              let wrapped = article;
+              if (showInterviewPrep) {
+                wrapped = (
+                  <InterviewPrepProvider
+                    jobId={job.isManual ? undefined : job.id}
+                    manualJobId={job.manual_job_id}
+                    initialPrep={parseStoredInterviewPrep(job.interview_prep)}
+                  >
+                    {wrapped}
+                  </InterviewPrepProvider>
+                );
+              }
+              if (showFollowUpContacts) {
+                wrapped = (
+                  <FollowUpContactsProvider
+                    jobId={job.isManual ? undefined : job.id}
+                    manualJobId={job.manual_job_id}
+                    companyName={job.company}
+                    initialContacts={parseStoredFollowUpContacts(job.follow_up_contacts)}
+                  >
+                    {wrapped}
+                  </FollowUpContactsProvider>
+                );
+              }
+
+              return <Fragment key={cardKey}>{wrapped}</Fragment>;
             })
           )}
         </div>

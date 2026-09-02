@@ -65,6 +65,8 @@ export function BoardPageClient() {
         filters={data.filters}
         signedIn={data.signedIn}
         priorityJobIds={data.priorityJobIds}
+        organizations={data.organizations}
+        locations={data.locations}
       />
     </div>
   );

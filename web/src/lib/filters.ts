@@ -81,6 +81,10 @@ export type JobFilters = {
   workType?: WorkType;
   recencyDays?: number;
   categories: string[];
+  /** Priority tab: exact organization (company or source). */
+  priorityOrg?: string;
+  /** Priority tab: exact location label. */
+  priorityPlace?: string;
 };
 
 export function parseJobFilters(params: Record<string, string | string[] | undefined>): JobFilters {
@@ -117,6 +121,8 @@ export function parseJobFilters(params: Record<string, string | string[] | undef
     workType,
     recencyDays: recencyOption?.days ?? undefined,
     categories: parseCategoryIds(params),
+    priorityOrg: str('org')?.trim() || undefined,
+    priorityPlace: str('place')?.trim() || undefined,
   };
 }
 
@@ -295,6 +301,8 @@ export function buildFilterParams(
     if (recency?.id) p.set('recency', recency.id);
   }
   for (const cat of filters.categories) p.append('cat', cat);
+  if (filters.priorityOrg) p.set('org', filters.priorityOrg);
+  if (filters.priorityPlace) p.set('place', filters.priorityPlace);
   if (page && page > 1) p.set('page', String(page));
   return p;
 }

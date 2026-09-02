@@ -128,7 +128,7 @@ export async function getAppliedJobs(
 
     let query = getDb()
       .from('job_applications')
-      .select('stage, applied_at, interview_prep, tailoring_sessions(gap_analysis), jobs(*), manual_jobs(*)')
+      .select('stage, applied_at, interview_prep, follow_up_contacts, tailoring_sessions(gap_analysis), jobs(*), manual_jobs(*)')
       .eq('subscriber_id', subscriberId)
       .order('applied_at', { ascending: false });
 
@@ -140,6 +140,7 @@ export async function getAppliedJobs(
 
     for (const row of data as Record<string, unknown>[]) {
       const interviewPrep = (row.interview_prep as Record<string, unknown>) ?? {};
+      const followUpContacts = (row.follow_up_contacts as Record<string, unknown>) ?? {};
       const tailoringSession = row.tailoring_sessions as { gap_analysis?: unknown } | null;
       const fitLevel = parseFitLevel(tailoringSession?.gap_analysis);
       const fitScore = parseFitScore(tailoringSession?.gap_analysis);
@@ -150,6 +151,7 @@ export async function getAppliedJobs(
           application_stage: row.stage as ApplicationStage,
           applied_at: row.applied_at as string,
           interview_prep: interviewPrep,
+          follow_up_contacts: followUpContacts,
           fit_level: fitLevel,
           fit_score: fitScore,
         });
@@ -163,6 +165,7 @@ export async function getAppliedJobs(
         application_stage: row.stage as ApplicationStage,
         applied_at: row.applied_at as string,
         interview_prep: interviewPrep,
+        follow_up_contacts: followUpContacts,
         fit_level: fitLevel,
         fit_score: fitScore,
       });

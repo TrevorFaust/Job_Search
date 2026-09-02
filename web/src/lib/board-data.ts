@@ -24,7 +24,9 @@ export type BoardPayload = {
   q: string;
   filters: JobFilters;
   signedIn: boolean;
-  priorityJobIds?: number[];
+  priorityJobIds: number[];
+  organizations: string[];
+  locations: string[];
 };
 
 export function normalizeBoardView(value: string | undefined): BoardView {
@@ -70,13 +72,10 @@ export async function fetchBoardPayload(
       )
     : undefined;
 
-  const priorityJobIdsPromise =
-    view === 'priority' || view === 'all' ? getPriorityJobIds() : Promise.resolve(undefined);
-
-  const result =
+  const [result, priorityJobIds] = await Promise.all([
     view === 'applied'
-      ? await getAppliedJobs(subscriber!.id, sort, page, q, filters, stage)
-      : await getAllJobs(
+      ? getAppliedJobs(subscriber!.id, sort, page, q, filters, stage)
+      : getAllJobs(
           sort,
           page,
           q,
@@ -89,9 +88,9 @@ export async function fetchBoardPayload(
             : view === 'all'
               ? { excludeSpecial: true }
               : undefined
-        );
-
-  const priorityJobIds = await priorityJobIdsPromise;
+        ),
+    getPriorityJobIds(),
+  ]);
 
   return {
     ...result,
@@ -102,6 +101,8 @@ export async function fetchBoardPayload(
     filters,
     signedIn,
     priorityJobIds,
+    organizations: result.organizations ?? [],
+    locations: result.locations ?? [],
   };
 }
 
