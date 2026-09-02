@@ -70,6 +70,7 @@ export type JobView = Job & {
   interview_prep?: Record<string, unknown>;
   fit_level?: FitLevel;
   fit_score?: number;
+  fit_estimated?: boolean;
   isManual?: boolean;
   manual_job_id?: string;
 };

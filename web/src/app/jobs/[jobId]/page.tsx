@@ -1,14 +1,15 @@
 import { cookies } from 'next/headers';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { JobDescription } from '@/components/JobDescription';
+import { Suspense } from 'react';
 import { BoardHomeLink } from '@/components/BoardHomeLink';
-import { InterviewPrepPanel } from '@/components/InterviewPrepPanel';
+import { JobDetailTabs, type JobDetailTab } from '@/components/JobDetailTabs';
 import { MarkAppliedButton } from '@/components/MarkAppliedButton';
 import { ApplicationStageSelect } from '@/components/ApplicationStageSelect';
 import { formatPostedDate } from '@/lib/filters';
 import { getApplicationForJob } from '@/lib/applications';
 import { getInterviewPrepState } from '@/lib/interview-actions';
+import { resolveFollowUpContactsForApplication } from '@/lib/follow-up-actions';
 import { getSubscriberByToken } from '@/lib/queries';
 import { formatAnnualSalary } from '@/lib/salary';
 import { getJobById, getLatestTailoringSessionForJob, getTailoringSession } from '@/lib/resume-queries';
@@ -26,43 +27,59 @@ export default async function JobDetailPage({
   params: Params;
   searchParams: SearchParams;
 }) {
-  const { jobId: jobIdRaw } = await params;
-  const query = await searchParams;
+  const [{ jobId: jobIdRaw }, query, jar] = await Promise.all([params, searchParams, cookies()]);
   const from = typeof query.from === 'string' ? query.from : undefined;
   const jobId = Number(jobIdRaw);
   if (!Number.isFinite(jobId)) notFound();
 
-  const job = await getJobById(jobId);
+  const token = jar.get('jh_token')?.value;
+  const [job, subscriber] = await Promise.all([
+    getJobById(jobId),
+    token ? getSubscriberByToken(token) : Promise.resolve(null),
+  ]);
   if (!job || job.status !== 'active') notFound();
 
-  const jar = await cookies();
-  const token = jar.get('jh_token')?.value;
-  const subscriber = token ? await getSubscriberByToken(token) : null;
-  const application =
-    subscriber ? await getApplicationForJob(subscriber.id, jobId) : null;
-  const session = application?.tailoring_session_id && subscriber
-    ? await getTailoringSession(application.tailoring_session_id, subscriber.id)
-    : subscriber
-      ? await getLatestTailoringSessionForJob(subscriber.id, jobId)
-      : null;
-  const hasDrafts = !!(session?.output_text || session?.cover_letter_text);
+  const application = subscriber ? await getApplicationForJob(subscriber.id, jobId) : null;
+  const session =
+    application?.tailoring_session_id && subscriber
+      ? await getTailoringSession(application.tailoring_session_id, subscriber.id)
+      : subscriber
+        ? await getLatestTailoringSessionForJob(subscriber.id, jobId)
+        : null;
   const interviewState =
     subscriber && application?.stage === 'interviewing'
       ? await getInterviewPrepState(jobId)
       : { prep: null, answers: [] };
+  const followUpContacts =
+    subscriber && application
+      ? await resolveFollowUpContactsForApplication(
+          subscriber.id,
+          { title: job.title, company: job.company, description: job.description ?? '' },
+          jobId
+        )
+      : null;
 
   const salary =
     formatAnnualSalary(job.salary_min_annual, job.salary_max_annual) ?? job.salary ?? null;
   const priorityMeta = job.is_special ? prioritySourceMeta(job.source, job.company) : null;
+  const hasDrafts = !!(session?.output_text || session?.cover_letter_text);
+  const defaultTab: JobDetailTab =
+    typeof query.tab === 'string'
+      ? (query.tab as JobDetailTab)
+      : application
+        ? hasDrafts
+          ? 'materials'
+          : 'follow-up'
+        : 'description';
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
+    <main className="mx-auto max-w-5xl px-6 py-10">
       <BoardHomeLink from={from} className="text-sm text-zinc-500 hover:text-amber-300">
         ← Back to job board
       </BoardHomeLink>
 
       <header className="mt-6 rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
-        {job.is_special && priorityMeta && (
+        {job.is_special && priorityMeta && !application && (
           <div className="mb-4 rounded-lg border border-amber-400/50 bg-amber-400/10 px-4 py-3">
             <p className="text-xs font-bold uppercase tracking-wider text-amber-300">
               Priority opportunity
@@ -94,6 +111,14 @@ export default async function JobDetailPage({
               {formatPostedDate(job.posted_at, job.created_at)}
             </dd>
           </div>
+          {application?.applied_at && (
+            <div>
+              <dt className="inline text-zinc-600">Applied </dt>
+              <dd className="inline text-zinc-400">
+                {formatPostedDate(application.applied_at, application.applied_at)}
+              </dd>
+            </div>
+          )}
         </dl>
 
         <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -121,12 +146,6 @@ export default async function JobDetailPage({
             <div className="flex flex-wrap items-center gap-3">
               <ApplicationStageSelect jobId={job.id} stage={application.stage} />
               <Link
-                href={`/tailor/${job.id}`}
-                className="rounded-lg border border-zinc-600 px-4 py-2 text-sm text-zinc-300 hover:border-amber-500/50 hover:text-amber-300"
-              >
-                {hasDrafts ? 'View resume & cover letter' : 'Tailor resume'}
-              </Link>
-              <Link
                 href="/?view=applied"
                 className="text-sm text-amber-400 hover:underline"
               >
@@ -146,27 +165,24 @@ export default async function JobDetailPage({
         </div>
       </header>
 
-      <section className="mt-8">
-        <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">
-          Description
-        </h2>
-        {job.description ? (
-          <JobDescription description={job.description} />
-        ) : (
-          <p className="text-sm text-zinc-500">No description stored for this listing.</p>
-        )}
-        <p className="mt-3 text-xs text-zinc-600">
-          Older listings may look compressed until the next scrape refreshes full descriptions.
-        </p>
-      </section>
-
-      {subscriber && application?.stage === 'interviewing' && (
-        <InterviewPrepPanel
+      <Suspense fallback={<p className="mt-8 text-sm text-zinc-500">Loading…</p>}>
+        <JobDetailTabs
+          description={job.description ?? ''}
+          tailorHref={`/tailor/${job.id}`}
+          outputText={session?.output_text ?? null}
+          coverLetterText={session?.cover_letter_text ?? null}
           jobId={job.id}
-          initialPrep={interviewState.prep}
-          initialAnswers={interviewState.answers}
+          companyName={job.company}
+          followUpContacts={followUpContacts}
+          canFollowUp={!!application}
+          canInterview={!!application}
+          interviewEnabled={application?.stage === 'interviewing'}
+          interviewPrep={interviewState.prep}
+          interviewAnswers={interviewState.answers}
+          followUpSummary="Find hiring managers and recruiters, copy outreach messages, and track who you've contacted."
+          defaultTab={defaultTab}
         />
-      )}
+      </Suspense>
     </main>
   );
 }

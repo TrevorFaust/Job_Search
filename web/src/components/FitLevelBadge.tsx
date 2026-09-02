@@ -8,15 +8,22 @@ import {
 type Props = {
   fitLevel: FitLevel;
   fitScore?: number;
+  estimated?: boolean;
 };
 
-export function FitLevelBadge({ fitLevel, fitScore }: Props) {
+export function FitLevelBadge({ fitLevel, fitScore, estimated }: Props) {
   const scoreLabel =
-    fitScore != null ? ` · ${formatFitScore(fitScore)}/10` : '';
+    fitScore != null
+      ? ` · ${estimated ? '~' : ''}${formatFitScore(fitScore)}/10`
+      : '';
   const title =
     fitScore != null
-      ? `Resume fit: ${fitLevelLabel(fitLevel)} (${formatFitScore(fitScore)}/10 likelihood with tailored resume)`
-      : `Resume fit: ${fitLevelLabel(fitLevel)}`;
+      ? estimated
+        ? `Estimated board fit: ${fitLevelLabel(fitLevel)} (~${formatFitScore(fitScore)}/10 from your experience corpus)`
+        : `Resume fit: ${fitLevelLabel(fitLevel)} (${formatFitScore(fitScore)}/10 likelihood with tailored resume)`
+      : estimated
+        ? `Estimated board fit: ${fitLevelLabel(fitLevel)}`
+        : `Resume fit: ${fitLevelLabel(fitLevel)}`;
 
   return (
     <span className={fitLevelBadgeClass(fitLevel)} title={title}>

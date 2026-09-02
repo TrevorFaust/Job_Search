@@ -2,7 +2,14 @@ import type { Job, SortKey } from './queries';
 import { geocodeUS, geocodeJobLocationLocal, milesBetween } from './geo';
 import { parseCategoryIds } from './categories';
 
-export function sortJobs<T extends Job>(jobs: T[], sort: SortKey): T[] {
+export function sortJobs<T extends Job>(
+  jobs: T[],
+  sort: SortKey,
+  options?: { pinSpecial?: boolean }
+): T[] {
+  const pinSpecial = options?.pinSpecial ?? true;
+  if (!pinSpecial) return sortJobsByKey(jobs, sort);
+
   const special = jobs.filter((j) => j.is_special);
   const regular = jobs.filter((j) => !j.is_special);
   const sortedSpecial = sortJobsByKey(special, sort);

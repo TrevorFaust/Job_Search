@@ -1,85 +1,84 @@
-import { parseFitLevel, parseFitScore, type FitLevel } from './fit-level';
+import { cache } from 'react';
+import { estimateBoardFit } from './board-fit';
+import { getCandidateExperienceCorpus } from './candidate-corpus';
 import { getDb } from './supabase';
 import type { JobView } from './queries';
 
-type FitMeta = { fit_level?: FitLevel; fit_score?: number };
+const CORPUS_TTL_MS = 60_000;
+const corpusBySubscriber = new Map<
+  string,
+  { expires: number; value: Awaited<ReturnType<typeof getCandidateExperienceCorpus>> }
+>();
 
-/** Attach fit_level / fit_score from the latest tailoring session gap analysis for each job. */
+async function loadCorpus(subscriberId: string) {
+  const now = Date.now();
+  const hit = corpusBySubscriber.get(subscriberId);
+  if (hit && hit.expires > now) return hit.value;
+  const value = await getCandidateExperienceCorpus(subscriberId);
+  corpusBySubscriber.set(subscriberId, { expires: now + CORPUS_TTL_MS, value });
+  return value;
+}
+
+/** Request-local dedupe (RSC) plus a short TTL so API board loads don't refetch every tab. */
+const getCachedCorpus = cache(loadCorpus);
+
+/**
+ * Attach a stable board fit from the candidate experience corpus.
+ * Does NOT use tailor gap_analysis — that score is for the wizard only and was
+ * causing badges to drop after analysis.
+ */
 export async function hydrateFitLevels(subscriberId: string, jobs: JobView[]): Promise<JobView[]> {
-  const missingScrapedIds = [
-    ...new Set(
-      jobs
-        .filter((j) => (!j.fit_level || j.fit_score == null) && !j.isManual)
-        .map((j) => j.id)
-    ),
-  ];
-  const missingManualIds = [
-    ...new Set(
-      jobs
-        .filter(
-          (j) => (!j.fit_level || j.fit_score == null) && j.isManual && j.manual_job_id
-        )
-        .map((j) => j.manual_job_id!)
-    ),
-  ];
+  if (!jobs.length) return jobs;
 
-  if (!missingScrapedIds.length && !missingManualIds.length) return jobs;
-
-  const fitByScrapedId = new Map<number, FitMeta>();
-  const fitByManualId = new Map<string, FitMeta>();
-
-  if (missingScrapedIds.length) {
-    const { data, error } = await getDb()
-      .from('tailoring_sessions')
-      .select('job_id, gap_analysis, created_at')
-      .eq('subscriber_id', subscriberId)
-      .in('job_id', missingScrapedIds)
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    for (const row of data ?? []) {
-      const jobId = row.job_id as number;
-      if (fitByScrapedId.has(jobId)) continue;
-      const fitLevel = parseFitLevel(row.gap_analysis);
-      const fitScore = parseFitScore(row.gap_analysis);
-      if (fitLevel || fitScore != null) {
-        fitByScrapedId.set(jobId, { fit_level: fitLevel, fit_score: fitScore });
-      }
-    }
-  }
-
-  if (missingManualIds.length) {
-    const { data, error } = await getDb()
-      .from('tailoring_sessions')
-      .select('manual_job_id, gap_analysis, created_at')
-      .eq('subscriber_id', subscriberId)
-      .in('manual_job_id', missingManualIds)
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    for (const row of data ?? []) {
-      const manualJobId = row.manual_job_id as string;
-      if (fitByManualId.has(manualJobId)) continue;
-      const fitLevel = parseFitLevel(row.gap_analysis);
-      const fitScore = parseFitScore(row.gap_analysis);
-      if (fitLevel || fitScore != null) {
-        fitByManualId.set(manualJobId, { fit_level: fitLevel, fit_score: fitScore });
-      }
-    }
+  const corpus = await getCachedCorpus(subscriberId);
+  if (!corpus) {
+    return jobs.map((job) =>
+      job.fit_level && job.fit_score != null
+        ? { ...job, fit_estimated: job.fit_estimated ?? true }
+        : job
+    );
   }
 
   return jobs.map((job) => {
-    if (job.fit_level && job.fit_score != null) return job;
-    const meta = job.isManual
-      ? job.manual_job_id
-        ? fitByManualId.get(job.manual_job_id)
-        : undefined
-      : fitByScrapedId.get(job.id);
-    if (!meta) return job;
+    const estimate = estimateBoardFit(
+      {
+        title: job.title,
+        description: job.description?.slice(0, 5000) ?? null,
+      },
+      corpus
+    );
     return {
       ...job,
-      fit_level: job.fit_level ?? meta.fit_level,
-      fit_score: job.fit_score ?? meta.fit_score,
+      fit_level: estimate.fit_level,
+      fit_score: estimate.fit_score,
+      fit_estimated: true,
     };
   });
+}
+
+/** Optional: read tailor gap fit for UI that wants analysis-only scores (not the board). */
+export async function getTailorFitForJob(
+  subscriberId: string,
+  opts: { jobId?: number; manualJobId?: string }
+): Promise<{ fit_level?: string; fit_score?: number } | null> {
+  let query = getDb()
+    .from('tailoring_sessions')
+    .select('gap_analysis, created_at')
+    .eq('subscriber_id', subscriberId)
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  if (opts.manualJobId) query = query.eq('manual_job_id', opts.manualJobId);
+  else if (opts.jobId != null) query = query.eq('job_id', opts.jobId);
+  else return null;
+
+  const { data, error } = await query.maybeSingle();
+  if (error) throw error;
+  if (!data?.gap_analysis) return null;
+
+  const gap = data.gap_analysis as { fit_level?: string; fit_score?: number };
+  return {
+    fit_level: gap.fit_level,
+    fit_score: gap.fit_score,
+  };
 }

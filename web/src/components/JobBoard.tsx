@@ -288,7 +288,7 @@ export function JobBoard({
           </p>
         )}
 
-        {jobs.some((job) => job.is_special) && (
+        {view !== 'applied' && jobs.some((job) => job.is_special) && (
           <section
             aria-label="Priority job opportunities"
             className="overflow-hidden rounded-2xl border-2 border-amber-400/70 bg-gradient-to-br from-amber-400/15 via-zinc-900 to-zinc-950 p-1 shadow-[0_0_40px_-12px_rgba(251,191,36,0.55)]"
@@ -328,7 +328,11 @@ export function JobBoard({
                                 {job.title}
                               </Link>
                               {job.fit_level && (
-                                <FitLevelBadge fitLevel={job.fit_level} fitScore={job.fit_score} />
+                                <FitLevelBadge
+                                  fitLevel={job.fit_level}
+                                  fitScore={job.fit_score}
+                                  estimated={job.fit_estimated}
+                                />
                               )}
                             </div>
                             <p className="mt-2 text-base font-semibold text-amber-200">
@@ -424,7 +428,11 @@ export function JobBoard({
                         {job.title}
                       </Link>
                       {job.fit_level && (
-                        <FitLevelBadge fitLevel={job.fit_level} fitScore={job.fit_score} />
+                        <FitLevelBadge
+                          fitLevel={job.fit_level}
+                          fitScore={job.fit_score}
+                          estimated={job.fit_estimated}
+                        />
                       )}
                     </div>
                     <p className="mt-1.5 text-sm font-medium text-zinc-300">

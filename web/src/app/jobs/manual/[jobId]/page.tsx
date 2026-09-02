@@ -1,14 +1,15 @@
 import { cookies } from 'next/headers';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { JobDescription } from '@/components/JobDescription';
+import { Suspense } from 'react';
 import { BoardHomeLink } from '@/components/BoardHomeLink';
-import { InterviewPrepPanel } from '@/components/InterviewPrepPanel';
+import { JobDetailTabs, type JobDetailTab } from '@/components/JobDetailTabs';
 import { MarkAppliedButton } from '@/components/MarkAppliedButton';
 import { ApplicationStageSelect } from '@/components/ApplicationStageSelect';
 import { formatPostedDate } from '@/lib/filters';
 import { getApplicationForManualJob } from '@/lib/applications';
 import { getInterviewPrepState } from '@/lib/interview-actions';
+import { resolveFollowUpContactsForApplication } from '@/lib/follow-up-actions';
 import { getSubscriberByToken } from '@/lib/queries';
 import { getManualJobById, getLatestTailoringSessionForManualJob, getTailoringSession } from '@/lib/resume-queries';
 import { RemoveApplicationButton } from '@/components/RemoveApplicationButton';
@@ -24,11 +25,9 @@ export default async function ManualJobDetailPage({
   params: Params;
   searchParams: SearchParams;
 }) {
-  const { jobId } = await params;
-  const query = await searchParams;
+  const [{ jobId }, query, jar] = await Promise.all([params, searchParams, cookies()]);
   const from = typeof query.from === 'string' ? query.from : undefined;
 
-  const jar = await cookies();
   const token = jar.get('jh_token')?.value;
   if (!token) redirect('/sign-in');
 
@@ -42,14 +41,31 @@ export default async function ManualJobDetailPage({
   const session = application?.tailoring_session_id
     ? await getTailoringSession(application.tailoring_session_id, subscriber.id)
     : await getLatestTailoringSessionForManualJob(subscriber.id, jobId);
-  const hasDrafts = !!(session?.output_text || session?.cover_letter_text);
   const interviewState =
     application?.stage === 'interviewing'
       ? await getInterviewPrepState(undefined, jobId)
       : { prep: null, answers: [] };
+  const followUpContacts = application
+    ? await resolveFollowUpContactsForApplication(
+        subscriber.id,
+        { title: job.title, company: job.company, description: job.description ?? '' },
+        undefined,
+        jobId
+      )
+    : null;
+
+  const hasDrafts = !!(session?.output_text || session?.cover_letter_text);
+  const defaultTab: JobDetailTab =
+    typeof query.tab === 'string'
+      ? (query.tab as JobDetailTab)
+      : application
+        ? hasDrafts
+          ? 'materials'
+          : 'follow-up'
+        : 'description';
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
+    <main className="mx-auto max-w-5xl px-6 py-10">
       <BoardHomeLink from={from} className="text-sm text-zinc-500 hover:text-amber-300">
         ← Back to job board
       </BoardHomeLink>
@@ -113,12 +129,6 @@ export default async function ManualJobDetailPage({
             <div className="flex flex-wrap items-center gap-3">
               <ApplicationStageSelect manualJobId={job.id} stage={application.stage} />
               <Link
-                href={`/tailor/manual/${job.id}`}
-                className="rounded-lg border border-zinc-600 px-4 py-2 text-sm text-zinc-300 hover:border-amber-500/50 hover:text-amber-300"
-              >
-                {hasDrafts ? 'View resume & cover letter' : 'Tailor resume'}
-              </Link>
-              <Link
                 href="/?view=applied"
                 className="text-sm text-amber-400 hover:underline"
               >
@@ -140,24 +150,24 @@ export default async function ManualJobDetailPage({
         </div>
       </header>
 
-      <section className="mt-8">
-        <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">
-          Description
-        </h2>
-        {job.description ? (
-          <JobDescription description={job.description} />
-        ) : (
-          <p className="text-sm text-zinc-500">No description stored for this job.</p>
-        )}
-      </section>
-
-      {application?.stage === 'interviewing' && (
-        <InterviewPrepPanel
+      <Suspense fallback={<p className="mt-8 text-sm text-zinc-500">Loading…</p>}>
+        <JobDetailTabs
+          description={job.description ?? ''}
+          tailorHref={`/tailor/manual/${job.id}`}
+          outputText={session?.output_text ?? null}
+          coverLetterText={session?.cover_letter_text ?? null}
           manualJobId={job.id}
-          initialPrep={interviewState.prep}
-          initialAnswers={interviewState.answers}
+          companyName={job.company}
+          followUpContacts={followUpContacts}
+          canFollowUp={!!application}
+          canInterview={!!application}
+          interviewEnabled={application?.stage === 'interviewing'}
+          interviewPrep={interviewState.prep}
+          interviewAnswers={interviewState.answers}
+          followUpSummary="Find hiring managers and recruiters, copy outreach messages, and track who you've contacted."
+          defaultTab={defaultTab}
         />
-      )}
+      </Suspense>
     </main>
   );
 }

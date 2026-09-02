@@ -176,7 +176,7 @@ export async function getAppliedJobs(
   let filtered = filterBySearch(withFitLevels, q);
   if (filters) filtered = await applyJobFiltersAsync(filtered, filters);
   if (filters?.categories.length) filtered = filterByCategories(filtered, filters.categories);
-  filtered = sortJobs(filtered, sort);
+  filtered = sortJobs(filtered, sort, { pinSpecial: false });
   return toPaginated(filtered, page);
 }
 
