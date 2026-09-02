@@ -7,6 +7,7 @@ const JOB_DETAIL_SELECTORS = [
   '.job-description',
   '.job_description',
   '#job_description',
+  '.opportunity-preview__body',
   '.single_job_listing .entry-content',
   '.single_job_listing .job_description',
   '.post-content',

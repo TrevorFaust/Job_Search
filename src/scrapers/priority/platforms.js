@@ -1,3 +1,4 @@
+import { extractSalaryFromText } from '../../lib/salary.js';
 import { stripHtml, truncateDescription, USER_AGENT } from '../utils.js';
 
 function parseRelativePosted(text) {
@@ -45,16 +46,18 @@ export async function scrapeGreenhouse(watch) {
   );
   if (!res.ok) throw new Error(`${watch.label} Greenhouse API ${res.status}`);
   const data = await res.json();
-  return (data.jobs ?? []).map((job) =>
-    toPriorityJob(watch, {
+  return (data.jobs ?? []).map((job) => {
+    const description = stripHtml(job.content ?? '');
+    return toPriorityJob(watch, {
       externalId: job.id,
       title: job.title,
       location: job.location?.name ?? null,
       url: job.absolute_url,
-      description: stripHtml(job.content ?? ''),
+      salary: extractSalaryFromText(description)?.raw ?? null,
+      description,
       postedAt: job.first_published ?? job.updated_at ?? null,
-    })
-  );
+    });
+  });
 }
 
 export async function scrapeWorkday(watch) {

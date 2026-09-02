@@ -1,4 +1,5 @@
 import { isJunkDescription, stripHtml, truncateDescription } from './utils.js';
+import { enrichDescriptionsFromPages } from './job-page.js';
 import {
   enrichJobsFromDetailPages,
   launchBrowser,
@@ -203,9 +204,13 @@ export async function scrape({ mode = 'daily' } = {}) {
       };
     });
 
+    await enrichDescriptionsFromPages(jobs, {
+      maxFetch: mode === 'full' ? 400 : 150,
+      concurrency: 6,
+    });
     await enrichJobsFromDetailPages(page, jobs, fetchDiceDetail, {
       maxFetch: mode === 'full' ? 100 : 50,
-      needsEnrichment: (job) => !job.company || isJunkDescription(job),
+      needsEnrichment: (job) => !job.salary || !job.company || isJunkDescription(job),
       overwriteFields: ['company'],
     });
 

@@ -1,3 +1,4 @@
+import { enrichDescriptionsFromPages } from './job-page.js';
 import { enrichShortDescriptions, launchBrowser, newPage } from './playwright/helpers.js';
 
 export const name = 'workatastartup';
@@ -64,6 +65,10 @@ export async function scrape({ mode = 'daily' } = {}) {
       postedAt: null,
     }));
 
+    await enrichDescriptionsFromPages(jobs, {
+      maxFetch: mode === 'full' ? 200 : 80,
+      concurrency: 5,
+    });
     await enrichShortDescriptions(page, jobs, {
       maxFetch: mode === 'full' ? 60 : 25,
     });

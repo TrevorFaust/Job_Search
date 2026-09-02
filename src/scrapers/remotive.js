@@ -1,4 +1,5 @@
 import Parser from 'rss-parser';
+import { enrichDescriptionsFromPages } from './job-page.js';
 import { fetchJson, mergeJobRecords, stripHtml, truncateDescription } from './utils.js';
 
 export const name = 'remotive';
@@ -201,5 +202,7 @@ export async function scrape(opts = {}) {
       return [];
     }),
   ]);
-  return dedupe([...api, ...rss, ...browser]);
+  const jobs = dedupe([...api, ...rss, ...browser]);
+  await enrichDescriptionsFromPages(jobs, { maxFetch: 80, concurrency: 5 });
+  return jobs;
 }

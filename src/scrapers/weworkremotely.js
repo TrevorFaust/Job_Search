@@ -1,5 +1,6 @@
 import Parser from 'rss-parser';
 import { stripHtml, truncateDescription } from './utils.js';
+import { extractSalaryFromText } from '../../lib/salary.js';
 
 export const name = 'weworkremotely';
 
@@ -23,6 +24,7 @@ const FEEDS = [
 function mapItem(item) {
   const [company, ...titleParts] = (item.title ?? '').split(': ');
   const title = titleParts.length ? titleParts.join(': ') : item.title;
+  const description = truncateDescription(stripHtml(item.content ?? item.contentSnippet ?? ''));
   return {
     source: name,
     externalId: item.guid || item.link,
@@ -30,8 +32,8 @@ function mapItem(item) {
     company: titleParts.length ? company : null,
     location: item.region || 'Remote',
     url: item.link,
-    salary: null,
-    description: truncateDescription(stripHtml(item.content ?? item.contentSnippet ?? '')),
+    salary: extractSalaryFromText(description)?.raw ?? null,
+    description,
     postedAt: item.isoDate ?? null,
   };
 }

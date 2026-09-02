@@ -1,3 +1,4 @@
+import { enrichDescriptionsFromPages } from './job-page.js';
 import { enrichShortDescriptions, launchBrowser, newPage } from './playwright/helpers.js';
 
 export const name = 'authenticjobs';
@@ -53,6 +54,10 @@ export async function scrape({ mode = 'daily' } = {}) {
     }
 
     const jobs = [...map.values()];
+    await enrichDescriptionsFromPages(jobs, {
+      maxFetch: mode === 'full' ? 200 : 80,
+      concurrency: 5,
+    });
     await enrichShortDescriptions(page, jobs, {
       maxFetch: mode === 'full' ? 80 : 30,
     });

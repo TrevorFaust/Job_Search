@@ -15,9 +15,11 @@ export async function scrape() {
       location: item.location || 'Remote',
       url: item.url || `https://remoteok.com/l/${item.id}`,
       salary:
-        item.salary_min && item.salary_max
-          ? `$${item.salary_min.toLocaleString()} - $${item.salary_max.toLocaleString()}`
-          : null,
+        item.salary_min || item.salary_max
+          ? `$${Number(item.salary_min || item.salary_max).toLocaleString()} - $${Number(
+              item.salary_max || item.salary_min
+            ).toLocaleString()}`
+          : item.s || null,
       description: truncateDescription(stripHtml(item.description)),
       postedAt: item.date ? new Date(item.date).toISOString() : null,
     }));
