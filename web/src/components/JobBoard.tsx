@@ -23,12 +23,12 @@ import {
 import { MarkAppliedButton } from './MarkAppliedButton';
 import { Pagination } from './Pagination';
 import type { StoredInterviewPrep } from '@/lib/interview-actions';
-import { priorityBannerText, prioritySourceMeta } from '@/lib/priority-jobs';
+import { usePrioritySeen } from '@/lib/priority-seen';
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { PersistBoardFilters } from './PersistBoardFilters';
 
-type BoardView = 'all' | 'preferred' | 'applied';
+type BoardView = 'all' | 'preferred' | 'priority' | 'applied';
 
 type Props = {
   jobs: JobView[];
@@ -41,11 +41,13 @@ type Props = {
   q: string;
   filters: JobFilters;
   signedIn: boolean;
+  priorityJobIds?: number[];
 };
 
 const BOARD_VIEWS: { id: BoardView; label: string; signedInOnly?: boolean }[] = [
   { id: 'all', label: 'All jobs' },
   { id: 'preferred', label: 'Preferred' },
+  { id: 'priority', label: 'Priority' },
   { id: 'applied', label: 'Applied', signedInOnly: true },
 ];
 
@@ -107,7 +109,11 @@ export function JobBoard({
   q,
   filters,
   signedIn,
+  priorityJobIds = [],
 }: Props) {
+  const pagePriorityIds = jobs.filter((j) => j.is_special && !j.isManual).map((j) => j.id);
+  const { newCount } = usePrioritySeen(view, pagePriorityIds, priorityJobIds);
+
   function hrefFor(
     overrides: { view?: BoardView; stage?: ApplicationStage | ''; sort?: string; q?: string; page?: number } = {}
   ) {
@@ -204,6 +210,11 @@ export function JobBoard({
               }`}
             >
               {v.label}
+              {v.id === 'priority' && newCount > 0 && view !== 'priority' ? (
+                <span className="ml-1.5 rounded-full bg-amber-300/30 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">
+                  {newCount} new
+                </span>
+              ) : null}
             </a>
           ))}
         </div>
@@ -260,9 +271,16 @@ export function JobBoard({
           </p>
         )}
 
+        {view === 'priority' && (
+          <p className="text-sm text-zinc-500">
+            Watched / priority roles only. These stay off the All jobs tab so they don&apos;t clog the main feed.
+            Opening this tab marks currently listed roles as seen.
+          </p>
+        )}
+
         {view === 'all' && (
           <p className="text-sm text-zinc-500">
-            Showing every scraped job in your selected timeline.
+            Showing every scraped job in your selected timeline (priority watched roles live under Priority).
             {signedIn
               ? ' Jobs you mark as applied move to the Applied tab.'
               : q
@@ -288,111 +306,6 @@ export function JobBoard({
           </p>
         )}
 
-        {view !== 'applied' && jobs.some((job) => job.is_special) && (
-          <section
-            aria-label="Priority job opportunities"
-            className="overflow-hidden rounded-2xl border-2 border-amber-400/70 bg-gradient-to-br from-amber-400/15 via-zinc-900 to-zinc-950 p-1 shadow-[0_0_40px_-12px_rgba(251,191,36,0.55)]"
-          >
-            <div className="rounded-[14px] bg-zinc-950/80 px-5 py-4">
-              <div className="mb-4 flex flex-wrap items-center gap-3">
-                <span className="rounded-full bg-amber-400 px-3 py-1 text-xs font-bold uppercase tracking-wider text-zinc-950">
-                  Priority opportunity
-                </span>
-                <p className="text-sm font-medium text-amber-100">
-                  {jobs.filter((job) => job.is_special).length === 1
-                    ? priorityBannerText(
-                        jobs.find((job) => job.is_special)!.source,
-                        jobs.find((job) => job.is_special)!.company
-                      )
-                    : 'Priority watched roles are pinned to the top of your board.'}
-                </p>
-              </div>
-              <div className="space-y-4">
-                {jobs
-                  .filter((job) => job.is_special)
-                  .map((job) => {
-                    const cardKey = job.isManual ? job.manual_job_id! : String(job.id);
-                    const priorityMeta = prioritySourceMeta(job.source, job.company);
-                    return (
-                      <article
-                        key={`special-${cardKey}`}
-                        className="rounded-xl border border-amber-400/40 bg-zinc-900/90 p-6"
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-4">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Link
-                                href={jobHref(job)}
-                                className="text-2xl font-bold text-zinc-50 hover:text-amber-300"
-                              >
-                                {job.title}
-                              </Link>
-                              {job.fit_level && (
-                                <FitLevelBadge
-                                  fitLevel={job.fit_level}
-                                  fitScore={job.fit_score}
-                                  estimated={job.fit_estimated}
-                                />
-                              )}
-                            </div>
-                            <p className="mt-2 text-base font-semibold text-amber-200">
-                              {job.company ?? priorityMeta.label}
-                            </p>
-                            <p className="mt-1 text-sm text-zinc-400">
-                              {job.location ?? 'Location n/a'} · {job.source}
-                              <span className="mx-2 text-zinc-600">·</span>
-                              Posted {formatPostedDate(job.posted_at, job.created_at)}
-                            </p>
-                            {job.description && (() => {
-                              const preview = descriptionPreview(job.description);
-                              if (!preview) return null;
-                              return (
-                                <p className="mt-4 line-clamp-3 text-sm leading-relaxed text-zinc-300">
-                                  {preview}
-                                </p>
-                              );
-                            })()}
-                          </div>
-                          <div className="flex shrink-0 flex-col items-end gap-3">
-                            <div className="font-mono text-base text-emerald-400">{salaryDisplay(job)}</div>
-                            <a
-                              href={job.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-bold text-zinc-950 hover:bg-amber-300"
-                            >
-                              {priorityMeta.externalCta}
-                            </a>
-                            {signedIn && (view === 'all' || view === 'preferred') && (
-                              <div className="flex flex-col items-end gap-1">
-                                <a
-                                  href={tailorHref(job)}
-                                  className="text-xs font-medium text-amber-400 hover:text-amber-300"
-                                >
-                                  Tailor resume →
-                                </a>
-                                {job.isManual ? (
-                                  <MarkAppliedButton manualJobId={job.manual_job_id} />
-                                ) : (
-                                  <MarkAppliedButton jobId={job.id} />
-                                )}
-                                {job.isManual ? (
-                                  <DismissJobButton manualJobId={job.manual_job_id} />
-                                ) : (
-                                  <DismissJobButton jobId={job.id} />
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </article>
-                    );
-                  })}
-              </div>
-            </div>
-          </section>
-        )}
-
         <div className="divide-y divide-zinc-800 rounded-xl border border-zinc-800 bg-zinc-900/50">
           {jobs.length === 0 ? (
             <p className="p-8 text-center text-zinc-500">
@@ -402,13 +315,17 @@ export function JobBoard({
                   : 'No applied jobs yet. Mark a job after you submit an application.'
                 : view === 'preferred'
                   ? 'No jobs match your selected interest areas. Try enabling more categories or loosening other filters.'
+                  : view === 'priority'
+                    ? q
+                      ? 'No priority jobs match this search. Clear search and try again.'
+                      : 'No priority jobs yet. Roles tagged as watched show up here once the scraper finds them.'
                   : q
                   ? `No jobs matching "${q}". Try a broader keyword or loosen your filters.`
                   : 'No jobs in this view yet. Run the scraper or check back after the next daily pull.'}
             </p>
           ) : (
             jobs
-              .filter((job) => !job.is_special)
+              .filter((job) => view === 'priority' || view === 'preferred' || !job.is_special)
               .map((job) => {
               const matchedCategories =
                 view === 'preferred' ? matchJobToCategories(job, filters.categories) : [];
@@ -427,6 +344,11 @@ export function JobBoard({
                       >
                         {job.title}
                       </Link>
+                      {job.is_special && (
+                        <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-300">
+                          Priority
+                        </span>
+                      )}
                       {job.fit_level && (
                         <FitLevelBadge
                           fitLevel={job.fit_level}
@@ -462,7 +384,7 @@ export function JobBoard({
                   </div>
                   <div className="shrink-0 text-right">
                     <div className="font-mono text-sm text-emerald-400">{salaryDisplay(job)}</div>
-                    {signedIn && (view === 'all' || view === 'preferred') && (
+                    {signedIn && (view === 'all' || view === 'preferred' || view === 'priority') && (
                       <div className="mt-2 flex flex-col items-end gap-1">
                         <a
                           href={tailorHref(job)}

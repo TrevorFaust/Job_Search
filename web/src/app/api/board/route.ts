@@ -12,6 +12,7 @@ export async function GET(request: Request) {
     return Response.json(payload);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to load board';
+    console.error('[api/board]', message, error);
     const status = message.includes('Sign in') ? 401 : 500;
     return Response.json({ error: message }, { status });
   }

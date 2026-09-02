@@ -64,6 +64,7 @@ export function BoardPageClient() {
         q={data.q}
         filters={data.filters}
         signedIn={data.signedIn}
+        priorityJobIds={data.priorityJobIds}
       />
     </div>
   );

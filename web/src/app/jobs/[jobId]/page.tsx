@@ -85,7 +85,7 @@ export default async function JobDetailPage({
               Priority opportunity
             </p>
             <p className="mt-1 text-sm text-amber-100/90">
-              This {priorityMeta.label} role is watched daily and pinned to the top of your job board.
+              This {priorityMeta.label} role is watched daily. Find it under the Priority tab on the job board.
             </p>
           </div>
         )}

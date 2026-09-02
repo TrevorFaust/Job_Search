@@ -81,6 +81,15 @@ export type PaginatedJobs = {
   total: number;
   page: number;
   totalPages: number;
+  /** All active priority job ids (for unseen badge). */
+  priorityJobIds?: number[];
+  organizations?: string[];
+  locations?: string[];
+};
+
+export type FetchBoardJobsOptions = {
+  specialOnly?: boolean;
+  excludeSpecial?: boolean;
 };
 
 /** Columns for list views — description is loaded only for the current page. */
@@ -197,7 +206,8 @@ function dedupeJobsById<T extends { id: number }>(jobs: T[]): T[] {
 async function fetchActiveJobs(
   filters?: JobFilters,
   max = BOARD_SCAN_LIMIT,
-  includeDescription = false
+  includeDescription = false,
+  options?: FetchBoardJobsOptions
 ): Promise<JobListRow[]> {
   const jobs: JobListRow[] = [];
   const batchSize = 1000;
@@ -214,6 +224,9 @@ async function fetchActiveJobs(
       .eq('status', 'active')
       .order('posted_at', { ascending: false, nullsFirst: false })
       .order('id', { ascending: false });
+
+    if (options?.specialOnly) query = query.eq('is_special', true);
+    else if (options?.excludeSpecial) query = query.eq('is_special', false);
 
     query = applyDbFilters(query, filters);
 
@@ -292,6 +305,8 @@ function needsMemoryBoardScan(filters?: JobFilters): boolean {
   if (!filters) return false;
   if (filters.locations.length > 0) return true;
   if (filters.workType === 'onsite') return true;
+  // Preferred / category matching needs description text — DB OR-ilike blows up.
+  if (filters.categories.length > 0) return true;
   return false;
 }
 
@@ -312,11 +327,8 @@ function applyCategoryDbFilter<T extends { or: (expr: string) => T }>(
   if (!categoryIds?.length) return query;
   const keywords = categoryDbKeywords(categoryIds);
   if (!keywords.length) return query;
-  const clauses = keywords.flatMap((kw) => [
-    `title.ilike.%${kw}%`,
-    `company.ilike.%${kw}%`,
-    `description.ilike.%${kw}%`,
-  ]);
+  // Title/company only — description.ilike across dozens of keywords times out on PostgREST.
+  const clauses = keywords.flatMap((kw) => [`title.ilike.%${kw}%`, `company.ilike.%${kw}%`]);
   return query.or(clauses.join(','));
 }
 
@@ -326,11 +338,17 @@ function applyBoardFilters(
   filters?: JobFilters,
   excludeJobIds?: Set<number>,
   q?: string,
-  categoryIds?: string[]
+  categoryIds?: string[],
+  options?: FetchBoardJobsOptions
 ) {
+  if (options?.specialOnly) query = query.eq('is_special', true);
+  else if (options?.excludeSpecial) query = query.eq('is_special', false);
   query = applyDbFilters(query, filters);
   query = applyExclusionFilter(query, excludeJobIds);
-  query = applyCategoryDbFilter(query, categoryIds);
+  // Category matching uses the memory path; keep DB category filter off the hot path.
+  if (categoryIds?.length && !needsMemoryBoardScan(filters)) {
+    query = applyCategoryDbFilter(query, categoryIds);
+  }
   if (q?.trim()) {
     const safe = q.trim().replace(/[%_,]/g, ' ').trim();
     if (safe) {
@@ -344,13 +362,14 @@ async function countActiveJobs(
   filters?: JobFilters,
   excludeJobIds?: Set<number>,
   q?: string,
-  categoryIds?: string[]
+  categoryIds?: string[],
+  options?: FetchBoardJobsOptions
 ): Promise<number> {
   let query = getDb()
     .from('jobs')
     .select('id', { count: 'exact', head: true })
     .eq('status', 'active');
-  query = applyBoardFilters(query, filters, excludeJobIds, q, categoryIds);
+  query = applyBoardFilters(query, filters, excludeJobIds, q, categoryIds, options);
   const { count, error } = await query;
   if (error) throw error;
   return count ?? 0;
@@ -360,37 +379,44 @@ function buildActiveJobsQuery(
   filters?: JobFilters,
   excludeJobIds?: Set<number>,
   q?: string,
-  categoryIds?: string[]
+  categoryIds?: string[],
+  options?: FetchBoardJobsOptions
 ) {
   let query = getDb()
     .from('jobs')
     .select(JOB_LIST_SELECT, { count: 'exact' })
     .eq('status', 'active');
-  return applyBoardFilters(query, filters, excludeJobIds, q, categoryIds);
+  return applyBoardFilters(query, filters, excludeJobIds, q, categoryIds, options);
 }
 
-function applyBoardSort(query: ReturnType<typeof buildActiveJobsQuery>, sort: SortKey) {
+function applyBoardSort(
+  query: ReturnType<typeof buildActiveJobsQuery>,
+  sort: SortKey,
+  options?: FetchBoardJobsOptions
+) {
+  // Priority jobs live on their own tab — don't pin them on All.
+  const pinSpecial = !options?.excludeSpecial && !options?.specialOnly;
+  const withSpecial = pinSpecial
+    ? query.order('is_special', { ascending: false })
+    : query;
+
   switch (sort) {
     case 'salary_high':
-      return query
-        .order('is_special', { ascending: false })
+      return withSpecial
         .order('salary_max_annual', { ascending: false, nullsFirst: false })
         .order('salary_min_annual', { ascending: false, nullsFirst: false })
         .order('id', { ascending: false });
     case 'salary_low':
-      return query
-        .order('is_special', { ascending: false })
+      return withSpecial
         .order('salary_min_annual', { ascending: true, nullsFirst: false })
         .order('salary_max_annual', { ascending: true, nullsFirst: false })
         .order('id', { ascending: false });
     case 'date_asc':
-      return query
-        .order('is_special', { ascending: false })
+      return withSpecial
         .order('posted_at', { ascending: true, nullsFirst: false })
         .order('id', { ascending: true });
     default:
-      return query
-        .order('is_special', { ascending: false })
+      return withSpecial
         .order('posted_at', { ascending: false, nullsFirst: false })
         .order('id', { ascending: false });
   }
@@ -403,15 +429,16 @@ async function fetchScrapedJobsPage(
   filters?: JobFilters,
   excludeJobIds?: Set<number>,
   q?: string,
-  categoryIds?: string[]
+  categoryIds?: string[],
+  options?: FetchBoardJobsOptions
 ): Promise<{ jobs: JobListRow[]; total: number }> {
   if (limit <= 0) {
-    const total = await countActiveJobs(filters, excludeJobIds, q, categoryIds);
+    const total = await countActiveJobs(filters, excludeJobIds, q, categoryIds, options);
     return { jobs: [], total };
   }
 
-  let query = buildActiveJobsQuery(filters, excludeJobIds, q, categoryIds);
-  query = applyBoardSort(query, sort);
+  let query = buildActiveJobsQuery(filters, excludeJobIds, q, categoryIds, options);
+  query = applyBoardSort(query, sort, options);
 
   const { data, error, count } = await query.range(offset, offset + limit - 1);
   if (error) throw error;
@@ -440,12 +467,19 @@ async function getAllJobsMemoryScan(
   filters?: JobFilters,
   excludeJobIds?: Set<number>,
   subscriberId?: string,
-  excludeManualJobIds?: Set<string>
+  excludeManualJobIds?: Set<string>,
+  options?: FetchBoardJobsOptions
 ): Promise<PaginatedJobs> {
   const includeDescription = !!q?.trim() || !!filters?.categories?.length;
-  let jobs: JobView[] = (await fetchActiveJobs(filters, BOARD_SCAN_LIMIT, includeDescription)) as JobView[];
+  let jobs: JobView[] = (await fetchActiveJobs(
+    filters,
+    BOARD_SCAN_LIMIT,
+    includeDescription,
+    options
+  )) as JobView[];
 
-  if (subscriberId) {
+  // Manual jobs only belong on All / Preferred, not Priority.
+  if (subscriberId && !options?.specialOnly) {
     const manualJobs = await getVisibleManualJobs(subscriberId, excludeManualJobIds);
     jobs = [...manualJobs, ...jobs];
   }
@@ -468,7 +502,7 @@ async function getAllJobsMemoryScan(
       jobs = filterByCategories(jobs, filters.categories);
     }
   }
-  jobs = sortJobs(jobs, sort);
+  jobs = sortJobs(jobs, sort, { pinSpecial: false });
   const paginated = toPaginated(jobs, page);
   if (!includeDescription) {
     paginated.jobs = await hydrateDescriptions(paginated.jobs);
@@ -487,7 +521,8 @@ export async function getAllJobs(
   filters?: JobFilters,
   excludeJobIds?: Set<number>,
   subscriberId?: string,
-  excludeManualJobIds?: Set<string>
+  excludeManualJobIds?: Set<string>,
+  options?: FetchBoardJobsOptions
 ): Promise<PaginatedJobs> {
   if (needsMemoryBoardScan(filters)) {
     return getAllJobsMemoryScan(
@@ -497,14 +532,16 @@ export async function getAllJobs(
       filters,
       excludeJobIds,
       subscriberId,
-      excludeManualJobIds
+      excludeManualJobIds,
+      options
     );
   }
 
   const categoryIds = filters?.categories ?? [];
-  const manualVisible = subscriberId
-    ? await getVisibleManualJobs(subscriberId, excludeManualJobIds)
-    : [];
+  const manualVisible =
+    subscriberId && !options?.specialOnly
+      ? await getVisibleManualJobs(subscriberId, excludeManualJobIds)
+      : [];
   const manualOnPage = page === 1 ? manualVisible : [];
   const manualTotal = manualVisible.length;
 
@@ -518,7 +555,8 @@ export async function getAllJobs(
     filters,
     excludeJobIds,
     q,
-    categoryIds
+    categoryIds,
+    options
   );
 
   let jobs: JobView[] = [...manualOnPage, ...(scraped as JobView[])];
@@ -540,6 +578,27 @@ export async function getAllJobs(
     page: Math.min(Math.max(1, page), totalPages),
     totalPages,
   };
+}
+
+export async function getPriorityJobIds(): Promise<number[]> {
+  const ids: number[] = [];
+  const batchSize = 1000;
+  let offset = 0;
+  while (true) {
+    const { data, error } = await getDb()
+      .from('jobs')
+      .select('id')
+      .eq('status', 'active')
+      .eq('is_special', true)
+      .order('id', { ascending: false })
+      .range(offset, offset + batchSize - 1);
+    if (error) throw error;
+    if (!data?.length) break;
+    for (const row of data) ids.push(row.id as number);
+    offset += data.length;
+    if (data.length < batchSize) break;
+  }
+  return ids;
 }
 
 export async function getJobsForSubscriber(

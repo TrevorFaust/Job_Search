@@ -1,4 +1,4 @@
-import { getAllJobs, getSubscriberByToken, normalizeSortKey, type JobView, type SortKey } from './queries';
+import { getAllJobs, getPriorityJobIds, getSubscriberByToken, normalizeSortKey, type JobView, type SortKey } from './queries';
 import {
   getAppliedJobExclusions,
   getAppliedJobs,
@@ -11,7 +11,7 @@ import { parseJobFilters, type JobFilters } from './filters';
 import { ALL_CATEGORY_IDS } from './categories';
 import type { Subscriber } from './queries';
 
-export type BoardView = 'all' | 'preferred' | 'applied';
+export type BoardView = 'all' | 'preferred' | 'priority' | 'applied';
 
 export type BoardPayload = {
   jobs: JobView[];
@@ -24,11 +24,13 @@ export type BoardPayload = {
   q: string;
   filters: JobFilters;
   signedIn: boolean;
+  priorityJobIds?: number[];
 };
 
 export function normalizeBoardView(value: string | undefined): BoardView {
   if (value === 'applied') return 'applied';
   if (value === 'preferred') return 'preferred';
+  if (value === 'priority') return 'priority';
   return 'all';
 }
 
@@ -68,6 +70,9 @@ export async function fetchBoardPayload(
       )
     : undefined;
 
+  const priorityJobIdsPromise =
+    view === 'priority' || view === 'all' ? getPriorityJobIds() : Promise.resolve(undefined);
+
   const result =
     view === 'applied'
       ? await getAppliedJobs(subscriber!.id, sort, page, q, filters, stage)
@@ -78,8 +83,15 @@ export async function fetchBoardPayload(
           filters,
           boardExclusions?.scrapedIds,
           subscriber?.id,
-          boardExclusions?.manualIds
+          boardExclusions?.manualIds,
+          view === 'priority'
+            ? { specialOnly: true }
+            : view === 'all'
+              ? { excludeSpecial: true }
+              : undefined
         );
+
+  const priorityJobIds = await priorityJobIdsPromise;
 
   return {
     ...result,
@@ -89,6 +101,7 @@ export async function fetchBoardPayload(
     q,
     filters,
     signedIn,
+    priorityJobIds,
   };
 }
 
