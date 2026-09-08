@@ -8,20 +8,24 @@ import type { TailoringSession } from '@/lib/resume-queries';
 import type { TailorAnswer, TailorQuestion } from '@/lib/llm';
 import { matchCandidateFact, withFactDrafts } from '@/lib/candidate-facts';
 import {
+  fitResumeDraft,
   generateCoverLetterDraft,
   generateTailoredDraft,
   reviseTailoredDraft,
   runGapAnalysis,
   saveCoverLetter,
-  saveResumeDraftOutput,
+  saveResumeDraft,
   saveTailorAnswers,
 } from '@/lib/resume-actions';
-import { normalizeCoverLetterBody } from '@/lib/cover-letter';
+import { composeCoverLetter, normalizeCoverLetterBody } from '@/lib/cover-letter';
+import { draftToPlainText, parseResumeOutput, resolveResumeFromOutput, serializeResumeOutput } from '@/lib/resume-draft';
+import type { ResumeDraft } from '@/lib/resume-template';
 import { MarkAppliedButton } from './MarkAppliedButton';
 import { ApplicationStageSelect } from './ApplicationStageSelect';
 import { DismissJobButton } from './DismissJobButton';
 import { PlainTextResumePreview } from './PlainTextResumePreview';
-import { CoverLetterPreview } from './CoverLetterPreview';
+import { ResumePreview, useDebouncedDraftSave } from './ResumePreview';
+import { CoverLetterPreview, useDebouncedCoverSave } from './CoverLetterPreview';
 
 type Props = {
   job: TailorJobView;
@@ -209,12 +213,24 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
     initialSession.cover_letter_text ? normalizeCoverLetterBody(initialSession.cover_letter_text) : ''
   );
   const [draftView, setDraftView] = useState<'resume' | 'cover-letter'>('resume');
+  const [resumeDraft, setResumeDraft] = useState<ResumeDraft | null>(
+    () => resolveResumeFromOutput(initialSession.output_text)?.draft ?? null
+  );
+  const { saving: draftSaving, saved: draftSaved } = useDebouncedDraftSave(
+    session.id,
+    resumeDraft,
+    saveResumeDraft
+  );
+  const { saving: coverSaving, saved: coverSaved } = useDebouncedCoverSave(
+    session.id,
+    coverLetterOutput,
+    saveCoverLetter
+  );
   const [extraContext, setExtraContext] = useState(initialSession.extra_context ?? '');
   const [pagePreference, setPagePreference] = useState<'one' | 'two'>(
     initialSession.page_preference ?? 'one'
   );
-  const [coverSaving, setCoverSaving] = useState(false);
-  const [coverSaved, setCoverSaved] = useState(false);
+  const [fitMessage, setFitMessage] = useState<string | null>(null);
 
   const kw = session.keyword_analysis ?? { matched: [], partial: [], missing: [] };
   const gap = session.gap_analysis && 'summary' in session.gap_analysis ? session.gap_analysis : null;
@@ -267,9 +283,11 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
         await saveTailorAnswers(session.id, payload, extraContext);
         const result = await generateTailoredDraft(session.id, extraContext, pagePreference);
         setOutput(result.output_text);
+        setResumeDraft(resolveResumeFromOutput(result.output_text)?.draft ?? null);
         setCoverLetterOutput(
           result.cover_letter_text ? normalizeCoverLetterBody(result.cover_letter_text) : ''
         );
+        setFitMessage(null);
         setSession((s) => ({
           ...s,
           status: 'done',
@@ -297,14 +315,36 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
     });
   }
 
+  function handleFitToPage() {
+    if (!resumeDraft) return;
+    setError(null);
+    setFitMessage(null);
+    startTransition(async () => {
+      try {
+        const result = await fitResumeDraft(session.id, resumeDraft);
+        setResumeDraft(result.draft);
+        setFitMessage(result.message);
+        setOutput(
+          serializeResumeOutput({
+            version: 1,
+            draft: result.draft,
+            keywordAlignment: parseResumeOutput(output)?.keywordAlignment ?? [],
+          })
+        );
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Fit failed');
+      }
+    });
+  }
+
   function handleReviseDraft(notes: string) {
     setError(null);
     const target = draftView === 'cover-letter' ? 'cover-letter' : 'resume';
 
     startTransition(async () => {
       try {
-        if (target === 'resume' && output) {
-          await saveResumeDraftOutput(session.id, output);
+        if (target === 'resume' && resumeDraft) {
+          await saveResumeDraft(session.id, resumeDraft);
         }
         if (target === 'cover-letter' && coverLetterOutput) {
           await saveCoverLetter(session.id, coverLetterOutput);
@@ -314,12 +354,14 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
           session.id,
           notes,
           target,
-          output,
+          resumeDraft,
           coverLetterOutput
         );
 
         if (target === 'resume') {
           setOutput(result.output_text);
+          setResumeDraft(resolveResumeFromOutput(result.output_text)?.draft ?? null);
+          setFitMessage(null);
         }
         if (target === 'cover-letter') {
           setCoverLetterOutput(normalizeCoverLetterBody(result.cover_letter_text ?? ''));
@@ -336,25 +378,7 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
     });
   }
 
-  function handleCoverLetterChange(body: string) {
-    const next = normalizeCoverLetterBody(body);
-    setCoverLetterOutput(next);
-    setCoverSaving(true);
-    setCoverSaved(false);
-    window.setTimeout(() => {
-      startTransition(async () => {
-        try {
-          await saveCoverLetter(session.id, next);
-          setCoverSaved(true);
-          window.setTimeout(() => setCoverSaved(false), 1500);
-        } catch (e) {
-          setError(e instanceof Error ? e.message : 'Failed to save cover letter');
-        } finally {
-          setCoverSaving(false);
-        }
-      });
-    }, 700);
-  }
+  const keywordAlignment = parseResumeOutput(output)?.keywordAlignment ?? [];
 
   return (
     <div className="space-y-8">
@@ -558,53 +582,127 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
               </div>
             </div>
             {(draftView === 'resume' || coverLetterOutput) && (
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() =>
                     navigator.clipboard.writeText(
-                      draftView === 'resume' ? output : coverLetterOutput
+                      draftView === 'resume'
+                        ? resumeDraft
+                          ? draftToPlainText(resumeDraft)
+                          : output
+                        : composeCoverLetter(coverLetterOutput)
                     )
                   }
                   className="rounded-lg border border-zinc-600 px-3 py-1.5 text-sm text-zinc-300 hover:border-amber-500/50"
                 >
                   Copy
                 </button>
-                <a
-                  href={`/api/tailor/${session.id}/download?format=docx&doc=${draftView === 'resume' ? 'resume' : 'cover-letter'}`}
+                {draftView === 'resume' && resumeDraft && (
+                  <button
+                    type="button"
+                    onClick={handleFitToPage}
+                    disabled={pending}
+                    className="rounded-lg border border-zinc-600 px-3 py-1.5 text-sm text-zinc-300 hover:border-amber-500/50 disabled:opacity-50"
+                  >
+                    Trim to one page
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    startTransition(async () => {
+                      try {
+                        if (draftView === 'resume' && resumeDraft) {
+                          await saveResumeDraft(session.id, resumeDraft);
+                        }
+                        if (draftView === 'cover-letter' && coverLetterOutput) {
+                          await saveCoverLetter(session.id, coverLetterOutput);
+                        }
+                        window.location.href = `/api/tailor/${session.id}/download?format=docx&doc=${
+                          draftView === 'resume' ? 'resume' : 'cover-letter'
+                        }`;
+                      } catch (e) {
+                        setError(e instanceof Error ? e.message : 'Download failed');
+                      }
+                    });
+                  }}
                   className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500"
                 >
                   Download DOCX
-                </a>
-                <a
-                  href={`/api/tailor/${session.id}/download?format=pdf&doc=${draftView === 'resume' ? 'resume' : 'cover-letter'}`}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    startTransition(async () => {
+                      try {
+                        if (draftView === 'resume' && resumeDraft) {
+                          await saveResumeDraft(session.id, resumeDraft);
+                        }
+                        if (draftView === 'cover-letter' && coverLetterOutput) {
+                          await saveCoverLetter(session.id, coverLetterOutput);
+                        }
+                        window.location.href = `/api/tailor/${session.id}/download?format=pdf&doc=${
+                          draftView === 'resume' ? 'resume' : 'cover-letter'
+                        }`;
+                      } catch (e) {
+                        setError(e instanceof Error ? e.message : 'Download failed');
+                      }
+                    });
+                  }}
                   className="rounded-lg border border-emerald-700 bg-emerald-950/40 px-3 py-1.5 text-sm font-medium text-emerald-200 hover:bg-emerald-900/50"
                 >
                   Download PDF
-                </a>
+                </button>
               </div>
             )}
           </div>
-          {draftView === 'resume' ? (
+          {fitMessage && draftView === 'resume' && (
+            <p className="text-xs text-zinc-400">{fitMessage}</p>
+          )}
+          {draftView === 'resume' && resumeDraft ? (
+            <ResumePreview
+              draft={resumeDraft}
+              onChange={setResumeDraft}
+              saving={draftSaving}
+              saved={draftSaved}
+            />
+          ) : draftView === 'resume' ? (
             <PlainTextResumePreview text={output} />
           ) : coverLetterOutput ? (
-            <div className="space-y-2">
-              {(coverSaving || coverSaved) && (
-                <p className="text-xs text-zinc-500">
-                  {coverSaving ? 'Saving…' : 'Saved'}
-                </p>
-              )}
-              <CoverLetterPreview
-                body={coverLetterOutput}
-                onChange={handleCoverLetterChange}
-                saving={coverSaving}
-                saved={coverSaved}
-              />
-            </div>
+            <CoverLetterPreview
+              body={coverLetterOutput}
+              onChange={setCoverLetterOutput}
+              saving={coverSaving}
+              saved={coverSaved}
+            />
           ) : (
             <p className="rounded-lg border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-500">
               No cover letter yet for this session.
             </p>
+          )}
+          {draftView === 'resume' && keywordAlignment.length > 0 && (
+            <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
+                Keyword alignment
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {keywordAlignment.map((item) => (
+                  <span
+                    key={item.term}
+                    className={`rounded-full px-2.5 py-0.5 text-xs ${
+                      /yes/i.test(item.status)
+                        ? 'bg-emerald-950 text-emerald-300'
+                        : /partial/i.test(item.status)
+                          ? 'bg-amber-950/80 text-amber-200'
+                          : 'bg-zinc-800 text-zinc-400'
+                    }`}
+                  >
+                    {item.term} · {item.status}
+                  </span>
+                ))}
+              </div>
+            </div>
           )}
           {draftView === 'cover-letter' && !coverLetterOutput && (
             <button
@@ -670,8 +768,10 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
           </div>
           <p className="text-xs text-zinc-600">
             {draftView === 'resume'
-              ? 'Copy plain accomplishment lines into your template (no bullet prefixes). DOCX and PDF downloads exclude Keyword Alignment notes.'
-              : 'Review before submitting. The cover letter uses the same answers and context as your resume draft.'}
+              ? resumeDraft
+                ? 'Edit bullets in the preview. Header and education start filled in. Trim to one page removes extras when the PDF would spill. PDF uses Cambria 11pt.'
+                : 'Legacy plain-text draft — regenerate for the structured Cambria editor.'
+              : 'Header and date are locked. The body auto-saves. Download PDF for Cambria 11, same as the resume.'}
           </p>
         </section>
       )}

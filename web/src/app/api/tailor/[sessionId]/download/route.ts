@@ -1,7 +1,9 @@
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
+import { composeCoverLetter } from '@/lib/cover-letter';
+import { draftToPlainText, parseResumeOutput } from '@/lib/resume-draft';
 import { textToDocxBuffer } from '@/lib/resume-docx';
-import { textToPdfBuffer } from '@/lib/resume-pdf';
+import { coverLetterToPdfBuffer, draftToPdfBuffer, textToPdfBuffer } from '@/lib/resume-pdf';
 import { getSubscriberByToken } from '@/lib/queries';
 import { extractResumeStructure } from '@/lib/resume-structure';
 import {
@@ -54,15 +56,33 @@ export async function GET(request: Request, { params }: { params: Params }) {
   const ext = format === 'pdf' ? 'pdf' : 'docx';
   const safeName = `${baseName}.${ext}`.replace(/[^\w\s.-]/g, '').replace(/\s+/g, '-');
 
-  const buffer =
-    format === 'pdf'
-      ? await textToPdfBuffer(draftText, formatMeta)
-      : await textToDocxBuffer(draftText, formatMeta);
+  let buffer: Buffer;
+  if (docType === 'cover-letter') {
+    buffer =
+      format === 'pdf'
+        ? await coverLetterToPdfBuffer(draftText)
+        : await textToDocxBuffer(composeCoverLetter(draftText));
+  } else {
+    const structured = parseResumeOutput(draftText);
+    if (structured) {
+      buffer =
+        format === 'pdf'
+          ? await draftToPdfBuffer(structured.draft)
+          : await textToDocxBuffer(draftToPlainText(structured.draft), formatMeta);
+    } else {
+      buffer =
+        format === 'pdf'
+          ? await textToPdfBuffer(draftText, formatMeta)
+          : await textToDocxBuffer(draftText, formatMeta);
+    }
+  }
 
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       'Content-Type':
-        format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        format === 'pdf'
+          ? 'application/pdf'
+          : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'Content-Disposition': `attachment; filename="${safeName}"`,
     },
   });

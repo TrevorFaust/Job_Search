@@ -1,10 +1,19 @@
 import Anthropic from '@anthropic-ai/sdk';
 import {
+  applyLockedStructure,
+  countResumeBullets,
+  preserveIdentityFields,
+  serializeResumeOutput,
+} from './resume-draft';
+import { fitResumeToPage } from './resume-fit';
+import { measureResumeDraft, capSkillGroupsToLines } from './resume-pdf';
+import {
   addressCandidateDirectly,
   extractResumeStructure,
-  stripResumeBulletPrefixes,
   type ResumeFormatMeta,
 } from './resume-structure';
+import { coverLetterDate, normalizeCoverLetterBody } from './cover-letter';
+import { FILL_IF_SLACK_PT, type ResumeDraft, type ResumeSessionOutput } from './resume-template';
 import { CANDIDATE_FACTS } from './candidate-facts';
 import { normalizeFitScore } from './fit-level';
 import type { FitLevel } from './fit-level';
@@ -52,8 +61,7 @@ export type GenerateOptions = {
   extraContext?: string;
   pageLength?: 'one' | 'two';
   formatMeta?: ResumeFormatMeta;
-  /** Prior resume draft text when revising with notes. */
-  previousOutput?: string;
+  previousDraft?: ResumeDraft | null;
   revisionNotes?: string;
 };
 
@@ -201,57 +209,71 @@ Other rules:
 - If prior_answers are provided, do NOT re-ask similar questions even if the wording would be different.
 - Respond with a single JSON object only — no markdown fences.`;
 
-const GENERATE_SYSTEM = `You are an expert resume writer and career strategist with 15+ years of experience tailoring resumes for competitive roles.
+const PUNCTUATION_RULE = `PUNCTUATION (hard, non-negotiable):
+- NEVER use em dashes, en dashes, or minus-as-dash characters (—, –, ―, −).
+- NEVER use a double hyphen as a dash ( -- ).
+- Use a comma, a period, a colon, or the word "to" instead.
+- ASCII hyphen is allowed only in dates and compound words (Feb 2021-Present, Power BI, well-known).`;
 
-PHASE 2 — Rewriting (you are in this phase now)
+const GENERATE_SYSTEM = `You are an expert resume writer filling Trevor Faust's locked one-page template. Output JSON only.
 
-You MUST always output a complete tailored resume draft. Never refuse. Never tell the candidate not to apply.
+- Header and education start from the template. Do not emit them in JSON. The user may edit those lines later.
+- First job is always Kennametal, Seattle, WA / Pittsburgh, PA / Solon, OH (Feb 2021-Present)
+- First role under Kennametal is always "Regional Channel Representative" (bullets vary)
+- Section order: Profile → Education → Professional Experience → Data & Analytics Projects → Relevant Skills
+- Skills: exactly TWO groups, items joined later with " | ", both groups centered
 
-Content selection (critical — curate, do not transcribe):
-- The master resume is a source library, NOT a checklist. Include ONLY roles, projects, and education that strengthen THIS application.
-- Omit entire jobs, internships, or education entries that are irrelevant to the target role (e.g. unrelated college research when applying to sports analytics).
-- Within one employer, include only the sub-roles or responsibilities that match the job — drop unrelated hats entirely (e.g. at a company with 3 roles, keep only the database/engineering work for a data role).
-- Reorder sections and entries so the most relevant experience appears first within each section.
-- NEVER pad with low-relevance jobs just to fill space. If the draft runs short, expand the most relevant roles instead: add more accomplishment lines, metrics, and context drawn from the same job or project — not unrelated history.
+${PUNCTUATION_RULE}
 
-Length:
-- Default: ONE FULL PAGE (~450–550 words in the resume body). The page should feel complete, not sparse.
-- Fill the page by going deeper on relevant work (4–6 lines on key roles, 2–3 on supporting roles) — not by re-adding omitted or tangential jobs.
-- If page_length is "two", you may use up to two pages but still curate aggressively; same rule applies — depth on relevant content, not breadth of unrelated roles.
+Trevor's own one-pagers are DENSE. They fill the sheet to about 0.4" from the bottom. A short resume is a failed draft. 45 lines is fine if they fill the page. Empty space under skills is a failure.
 
-Structure & formatting (match the original resume layout):
-- Keep the SAME section headers and section ORDER as original_structure when provided (skip sections that would be empty after curation).
-- Keep contact/header lines at the top in the same style.
-- Do NOT use bullet characters (•, -, *, etc.) on accomplishment lines. Write each achievement as a plain text line — the candidate pastes into a template that already has bullets.
-- Do NOT add markdown, code fences, or commentary before the resume.
-- Resume body uses professional implied-first-person lines — never refer to the candidate by name in the resume text.
+Default packed page (use this unless the job is purely product/design and projects need the room):
+- profile: 2-3 sentences wrapping to 4-5 lines. Not 5+ sentences. Implied first person (no "I"). Last sentence can hook the employer.
+- Channel Rep: 5-6 bullets. Most bullets wrap to 2 lines. Mark the weakest (often customer retention) cutFirst: true.
+- Process Engineer: INCLUDE by default with 3 bullets ($2M / 700 hours, Excel/VBA scheduling, proposal/stakeholder). Omit only for product/design/frontend-heavy roles where projects should go deeper instead.
+- Extra employers: ONLY if clearly relevant (Penn State energy research for energy roles).
+- projects: 1-2 projects typical; the primary one (DraftDNA / NFL platform) gets 4-5 bullets. A second project (newsletter, job-board tooling) gets 2-3 when it maps to the JD.
+- Prefer extra bullets that prove depth for THIS job: methods, stakeholders, scale, tools used in context. Do not invent metrics.
+- Project titles are italic AND underlined. Put the URL on the SAME line as the title, e.g. "NFL Data Platform & Mock Draft Simulator (draftdna.com)". Do NOT emit a subtitle field. Do NOT put stack on its own line (no "draftdna.com, Python, PostgreSQL, ..."). If the JD cares about the stack, one bullet may name Python, PostgreSQL, Supabase, React, TypeScript, Tailwind.
+- skills: exactly TWO groups. Keep a solid tool list, but each group's items (joined with " | ") must wrap to AT MOST 2 lines. Headings do not count. About 6-9 concise tools per group is typical; never a keyword dump.
+- Do NOT stuff job-description keywords into Relevant Skills. Mirror JD language in profile, experience bullets, and project bullets where it is true. Skills are an inventory of tools Trevor actually uses, ordered with the most relevant first.
+- If the page has room, expand Channel Rep, Process Engineer, or projects. Never grow skills past 2 lines to fill space.
+- Each bullet: NO leading dash. Lead with the quantified result when one exists, then the action. Vary verbs. Never invent employers, titles, dates, degrees, or metrics.
 
-If fit is weak: still produce a full one-page resume — heavily tailor Profile/Summary, light keyword alignment elsewhere, never fabricate credentials.
+Do NOT write a sparse resume. Empty space under skills means you omitted Process Engineer, a project, or bullets you should have kept. Put cutFirst on extras rather than leaving them out.
 
-Rewriting principles:
-1. Mirror JD language where truthful (ATS keywords).
-2. Impact lines: lead with the quantified result, then the action that drove it — [Verb] + [result/metric] + [by/through action or context]. Put numbers near the front of the sentence, not buried at the end. Example: "Saved 700 labor hours and $2M annually by analyzing production workflows and capacity data to identify operational bottlenecks and implement scheduling improvements." NOT "Analyzed... implementing... that saved 700 labor hours and $2M annually."
-3. Within each role, lead with the most relevant accomplishments.
-4. Tailor Profile/Summary in 2–3 tight sentences focused on this role.
-5. Vary action verbs — no repeating the same verb across lines (use synonyms: built/constructed/developed/engineered/etc.).
-6. Never invent employers, titles, dates, degrees, certifications, or skills.
+Voice: Power BI, team of 7, 20% retention, $2M / 700 labor hours, 200M+ records, 400+ draft badges, 32 NFL teams. No "results-oriented" fluff.
 
-Output format:
-1. Full resume text (sections + plain accomplishment lines, no bullet prefixes) — this is what the candidate copies into their template.
-2. Blank line, then "Keyword Alignment" section listing 5–8 JD terms with Yes / Partial / Gap.`;
+Respond with a single JSON object only. No markdown fences, no resume header/education text.`;
 
-const REVISE_GENERATE_SYSTEM = `You revise an existing tailored resume based on the candidate's feedback.
-
-PHASE 2 — Revision (you are in this phase now)
+const REVISE_GENERATE_SYSTEM = `You revise an existing tailored resume JSON based on the candidate's feedback. Output JSON only.
 
 - Start from current_draft. Apply ONLY the requested changes — do not rewrite from scratch unless they asked.
-- Keep sections, roles, and wording that still work. Preserve one-page density unless they ask to shorten or expand.
-- NEVER invent employers, titles, dates, degrees, certifications, metrics, or skills.
+- Keep bullets, sections, and wording that still work. Preserve the same one-page density unless they ask to shorten.
+- Header and education are locked. Do not emit them in JSON.
+- Same Kennametal structure, section order, and skills rules as the original tailored resume.
+- NEVER invent employers, titles, dates, degrees, metrics, or skills.
 - If a requested change would require invented experience, keep the original wording for that part.
-- Same formatting rules as a fresh tailored resume: no bullet characters on accomplishment lines, mirror original structure, no markdown fences or commentary.
-- End with a Keyword Alignment section listing 5–8 JD terms with Yes / Partial / Gap.
 
-Output the full revised resume text only.`;
+${PUNCTUATION_RULE}
+
+Respond with a single JSON object only. No markdown fences, no resume header/education text.`;
+
+const FILL_SYSTEM = `You densify an existing tailored resume JSON so it fills one US Letter page. Output JSON only.
+
+${PUNCTUATION_RULE}
+
+- Keep the same header and education text. Do not rewrite name, contact, or school lines.
+- Keep profile at 2-3 sentences wrapping to about 4-5 lines. Do not add a fourth sentence.
+- No project subtitle. DraftDNA title must include (draftdna.com) on the same line.
+- Tech stack is not its own line. Include it as a bullet only if the job posting cares about those tools.
+- Do NOT add skills items to fill the page. Each skills group must stay at most 2 wrapped lines. Leave skills as they are unless they already overflow, in which case cut trailing tools.
+- ADD 1-2 NEW bullets. Keep existing bullets. Each new bullet should wrap to about 2 lines.
+- New bullets must increase credibility for THIS job: a method, tool-in-context, stakeholder, scale, or quantified outcome from the master resume that maps to the posting. Prefer Channel Rep, Process Engineer, or the primary project. Never invent employers, titles, dates, or metrics.
+- Mark newly added bullets cutFirst: true.
+- Return the full draft JSON: profile, experience, projects, skills. Do not return keywordAlignment.
+
+The page currently has leftover space. Add the requested number of new bullets.`;
 
 const MAX_CLARIFYING_QUESTIONS = 3;
 const MAX_QUESTION_CHARS = 180;
@@ -369,7 +391,7 @@ export async function generateTailoredResume(
 ): Promise<string> {
   const formatMeta = options.formatMeta ?? extractResumeStructure(resumeText);
   const pageLength = options.pageLength ?? 'one';
-  const revising = !!(options.revisionNotes?.trim() && options.previousOutput?.trim());
+  const revising = !!(options.revisionNotes?.trim() && options.previousDraft);
 
   const user = [
     `Job title: ${job.title}`,
@@ -379,14 +401,14 @@ export async function generateTailoredResume(
     'Job description:',
     job.description.slice(0, 10000),
     '',
-    'Original resume (preserve this structure and section names):',
+    'Master resume (source library — curate, do not transcribe):',
     resumeText.slice(0, 10000),
     '',
-    'original_structure:',
+    'original_structure (ignore layout; content only):',
     JSON.stringify(formatMeta),
     '',
     'Gap analysis:',
-    JSON.stringify(gapAnalysis),
+    JSON.stringify(compactGapAnalysis(gapAnalysis)),
     '',
     'Candidate Q&A (authoritative — do not go beyond these confirmations):',
     JSON.stringify(answers),
@@ -397,21 +419,163 @@ export async function generateTailoredResume(
     ...(revising
       ? [
           'Current tailored draft (revise this — do not start over unless asked):',
-          options.previousOutput!.trim().slice(0, 12000),
+          JSON.stringify({
+            profile: options.previousDraft!.profile,
+            experience: options.previousDraft!.experience,
+            projects: options.previousDraft!.projects,
+            skills: options.previousDraft!.skills,
+          }),
           '',
           'Revision notes from the candidate:',
           options.revisionNotes!.trim().slice(0, 1500),
           '',
-          'Revise the current draft per the notes. Output the full updated resume only.',
         ]
-      : [
-          'Write the tailored ONE-PAGE resume now (unless page_length is two). Curate for relevance — omit unrelated jobs. Fill the page by expanding relevant roles, not by adding back low-relevance jobs. No bullet characters on accomplishment lines. Mirror original_structure. Output the full resume — never refuse.',
-        ]),
+      : []),
+    'Return JSON with this shape:',
+    JSON.stringify({
+      profile: '2-3 sentences wrapping to 4-5 lines, no I, no em dashes, tailored to this job',
+      experience: [
+        {
+          company: 'Kennametal',
+          locationDates: ', Seattle, WA / Pittsburgh, PA / Solon, OH  (Feb 2021-Present)',
+          roles: [
+            {
+              title: 'Regional Channel Representative',
+              bullets: [{ text: 'accomplishment without leading dash', cutFirst: false }],
+            },
+            {
+              title: 'Process Engineer',
+              bullets: [{ text: 'optional role', cutFirst: false }],
+            },
+          ],
+        },
+      ],
+      projects: [
+        {
+          title: 'NFL Data Platform & Mock Draft Simulator (draftdna.com)',
+          bullets: [{ text: 'accomplishment. Stack only here if relevant to the JD.', cutFirst: false }],
+        },
+      ],
+      skills: [
+        { heading: 'Data & Analytic Tools', items: ['Power BI', 'Python'] },
+        { heading: 'Data Analysis', items: ['Forecasting', 'Data Storytelling'] },
+      ],
+      keywordAlignment: [{ term: 'JD keyword', status: 'Yes | Partial | Gap' }],
+    }),
+    '',
+    revising
+      ? 'Revise the current draft per the notes. Return the full updated resume JSON only.'
+      : 'Write a FULL one-page resume JSON now. Always include Kennametal + Regional Channel Representative. Default to also including Process Engineer. Pack the page with experience and project bullets, not a bloated skills list. Channel Rep 5-6 bullets, Process Engineer 3, primary project 4-5. Skills: two groups, each at most 2 wrapped lines, relevant tools first. No subtitle line. No em dashes. JSON only.',
   ].join('\n');
 
   const text = await claudeText(revising ? REVISE_GENERATE_SYSTEM : GENERATE_SYSTEM, user, 12000);
   if (!text) throw new Error('Empty response from AI');
-  return stripResumeBulletPrefixes(text);
+
+  const parsed = parseJsonResponse<{
+    profile?: string;
+    experience?: ResumeDraft['experience'];
+    projects?: ResumeDraft['projects'];
+    skills?: ResumeDraft['skills'];
+    keywordAlignment?: ResumeSessionOutput['keywordAlignment'];
+  }>(text);
+
+  let draft = preserveIdentityFields(
+    capSkillGroupsToLines(
+      applyLockedStructure({
+        header: options.previousDraft?.header,
+        education: options.previousDraft?.education,
+        profile: parsed.profile ?? '',
+        experience: parsed.experience ?? [],
+        projects: parsed.projects ?? [],
+        skills: parsed.skills ?? [],
+      })
+    ),
+    options.previousDraft
+  );
+
+  if (pageLength === 'one') {
+    let layout = measureResumeDraft(draft);
+    if (!layout.fits) {
+      draft = fitResumeToPage(draft).draft;
+      layout = measureResumeDraft(draft);
+    }
+    for (let pass = 0; pass < 3 && layout.fits && layout.slackPt > FILL_IF_SLACK_PT; pass++) {
+      const extraBullets = Math.max(1, Math.min(2, Math.round(layout.slackPt / 26)));
+      const before = countResumeBullets(draft);
+      draft = capSkillGroupsToLines(
+        await expandResumeDraft(draft, resumeText, job, extraBullets)
+      );
+      layout = measureResumeDraft(draft);
+      if (countResumeBullets(draft) <= before && layout.slackPt > FILL_IF_SLACK_PT) {
+        continue;
+      }
+      if (!layout.fits) {
+        draft = fitResumeToPage(draft).draft;
+        break;
+      }
+    }
+  }
+
+  const output: ResumeSessionOutput = {
+    version: 1,
+    draft,
+    keywordAlignment: (Array.isArray(parsed.keywordAlignment) ? parsed.keywordAlignment : []).map(
+      (item) => ({
+        term: item.term,
+        status: item.status,
+      })
+    ),
+  };
+  return serializeResumeOutput(output);
+}
+
+async function expandResumeDraft(
+  draft: ResumeDraft,
+  resumeText: string,
+  job: { title: string; company: string | null; description: string },
+  extraBullets: number
+): Promise<ResumeDraft> {
+  const user = [
+    `Add ${extraBullets} NEW bullet${extraBullets === 1 ? '' : 's'} (about 2 wrapped lines each) so the page is full.`,
+    'Keep every existing bullet. New bullets should prove depth for this job (method, tool in context, stakeholders, or scale) using only facts from the master resume.',
+    `Job title: ${job.title}`,
+    `Company: ${job.company ?? 'Unknown'}`,
+    '',
+    'Job description:',
+    job.description.slice(0, 6000),
+    '',
+    'Master resume (source library; curate, do not invent):',
+    resumeText.slice(0, 8000),
+    '',
+    'Current draft JSON:',
+    JSON.stringify(draft),
+    '',
+    'Return the full denser draft JSON only.',
+  ].join('\n');
+
+  try {
+    const text = await claudeText(FILL_SYSTEM, user, 8000);
+    const parsed = parseJsonResponse<{
+      header?: ResumeDraft['header'];
+      education?: ResumeDraft['education'];
+      profile?: string;
+      experience?: ResumeDraft['experience'];
+      projects?: ResumeDraft['projects'];
+      skills?: ResumeDraft['skills'];
+    }>(text);
+    return capSkillGroupsToLines(
+      applyLockedStructure({
+        header: parsed.header ?? draft.header,
+        education: parsed.education ?? draft.education,
+        profile: parsed.profile ?? draft.profile,
+        experience: parsed.experience ?? draft.experience,
+        projects: parsed.projects ?? draft.projects,
+        skills: parsed.skills ?? draft.skills,
+      })
+    );
+  } catch {
+    return draft;
+  }
 }
 
 const COVER_LETTER_SYSTEM = `You are an expert career coach and cover letter writer with 15+ years of experience helping candidates land competitive roles.
@@ -426,8 +590,16 @@ Tone (critical):
 - Gap/mismatch notes in the input are for your awareness only so you do not invent credentials — never surface them in the letter.
 
 Rules:
-- ONE PAGE ONLY — target 250–400 words in the body (3–4 short paragraphs).
-- Use standard business letter format: candidate name and contact info at top (extract from resume), date, company name, salutation, body, professional closing (e.g. "Sincerely,"), and typed name.
+- Do NOT include letterhead (name, location, email, phone, LinkedIn, GitHub, website). The template already prints those three header lines.
+- Do NOT include a date line. Today's date is inserted automatically when the letter is saved as a PDF.
+- Start with the company name (optional) and then the salutation (e.g. "Dear Hiring Manager,") on its own line.
+- Put a blank line after the salutation, then the body (3–4 short paragraphs with a blank line between each).
+- Put a blank line before the closing. Then:
+Sincerely,
+Trevor Faust
+- "Trevor Faust" goes on the line immediately after "Sincerely,". No blank line between them, and never on the same line.
+- NEVER continue the first body sentence on the salutation line.
+- ONE PAGE ONLY. Target 250–400 words in the body (3–4 short paragraphs).
 - First person throughout — write as the candidate ("I", "my", "me").
 - Ground every claim in the resume and Q&A — NEVER invent employers, projects, degrees, or skills.
 - Open with a specific hook: why THIS role at THIS company (not generic enthusiasm).
@@ -435,7 +607,8 @@ Rules:
 - Mirror key language from the job description where truthful.
 - Close with a confident call to action (e.g. look forward to discussing how your experience can contribute).
 - Do NOT add markdown, code fences, commentary, or notes after the letter.
-- Output the complete letter text only — ready to copy or print.`;
+- NEVER use em dashes, en dashes, or " -- " as a dash. Use a comma, a period, or "to".
+- Output the complete letter text only, ready to copy or print.`;
 
 const REVISE_COVER_LETTER_SYSTEM = `You revise an existing cover letter based on the candidate's feedback.
 
@@ -443,9 +616,9 @@ The candidate already has a draft they mostly like. Apply their revision notes w
 
 Rules:
 - Start from current_draft. Apply ONLY the requested tweaks — do not rewrite from scratch unless they asked.
-- Same formatting rules as the original cover letter.
+- Same formatting rules as the original cover letter (no letterhead, no date line, salutation + body + Sincerely/Trevor Faust).
 - NEVER invent employers, projects, degrees, or skills.
-- NEVER apologize for gaps or missing requirements.
+- NEVER use em dashes, en dashes, or " -- " as a dash.
 - Output the complete revised letter text only.`;
 
 function compactCoverLetterContext(gap: GapAnalysis) {
@@ -476,7 +649,7 @@ export async function generateCoverLetter(
     'Job description:',
     job.description.slice(0, 8000),
     '',
-    'Candidate resume (source of truth for name, contact, and experience):',
+    'Candidate resume (source of truth for experience — do not copy the header into the letter):',
     resumeText.slice(0, 8000),
     '',
     'Strengths and reframe angles (use for confident positioning — do NOT mention gaps or missing skills):',
@@ -496,11 +669,12 @@ export async function generateCoverLetter(
           'Revision notes from the candidate:',
           options.revisionNotes!.trim().slice(0, 1500),
           '',
-          'Revise the letter per the notes. Keep letterhead/contact formatting consistent.',
         ]
-      : [
-          'Write the one-page cover letter now. Confident tone throughout — no disclaimers about missing skills. Extract name and contact from the resume for the header.',
-        ]),
+      : []),
+    `Today's date is ${coverLetterDate()}. Never write a date line or a different current year.`,
+    revising
+      ? 'Revise the letter per the notes. Start at the company name or salutation. No letterhead, no date.'
+      : 'Write the letter body now. Start at the company name or salutation. No letterhead, no date. Confident tone throughout — no disclaimers about missing skills.',
   ].join('\n');
 
   const text = await claudeText(
@@ -509,7 +683,7 @@ export async function generateCoverLetter(
     4096
   );
   if (!text) throw new Error('Empty cover letter response from AI');
-  return text.trim();
+  return normalizeCoverLetterBody(text);
 }
 
 const INTERVIEW_PREP_SYSTEM = `You are an expert interview coach helping a candidate prepare for a specific job interview.

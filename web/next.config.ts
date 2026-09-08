@@ -10,6 +10,9 @@ loadEnvConfig(root);
 loadEnvConfig(path.resolve(root, ".."));
 
 const nextConfig: NextConfig = {
+  // Keep pdfkit out of the bundler so its AFM font metrics resolve from node_modules
+  // (otherwise Turbopack rewrites __dirname to C:\ROOT and Helvetica.afm 404s).
+  serverExternalPackages: ['pdfkit', 'fontkit'],
   // Parent folder also has a package-lock.json (the scraper). Pin Turbopack to web/.
   turbopack: {
     root,

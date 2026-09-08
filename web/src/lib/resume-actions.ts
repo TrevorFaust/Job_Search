@@ -25,6 +25,11 @@ import {
   upsertAnswerBank,
 } from './tailor-answer-bank';
 import { analyzeResumeForJob, generateCoverLetter, generateTailoredResume, type GapAnalysis, type TailorAnswer } from './llm';
+import { normalizeCoverLetterBody } from './cover-letter';
+import { applyLockedStructure, parseResumeOutput, plainTextToResumeDraft, serializeResumeOutput } from './resume-draft';
+import { fitResumeToPage } from './resume-fit';
+import { capSkillGroupsToLines } from './resume-pdf';
+import type { ResumeDraft } from './resume-template';
 
 const COOKIE_NAME = 'jh_token';
 
@@ -298,6 +303,16 @@ export async function generateCoverLetterDraft(sessionId: string, extraContext =
   return { cover_letter_text };
 }
 
+export async function saveCoverLetter(sessionId: string, coverLetterText: string) {
+  const sub = await requireSubscriber();
+  const session = await getTailoringSession(sessionId, sub.id);
+  if (!session) throw new Error('Session not found');
+  const cover_letter_text = normalizeCoverLetterBody(coverLetterText);
+  if (!cover_letter_text.trim()) throw new Error('Cover letter is empty');
+  await updateSession(sessionId, sub.id, { cover_letter_text });
+  return { cover_letter_text };
+}
+
 export async function saveResumeDraftOutput(sessionId: string, outputText: string) {
   const sub = await requireSubscriber();
   const session = await getTailoringSession(sessionId, sub.id);
@@ -308,14 +323,40 @@ export async function saveResumeDraftOutput(sessionId: string, outputText: strin
   return { output_text: trimmed };
 }
 
-export async function saveCoverLetter(sessionId: string, coverLetterText: string) {
+export async function saveResumeDraft(sessionId: string, draft: ResumeDraft) {
   const sub = await requireSubscriber();
   const session = await getTailoringSession(sessionId, sub.id);
   if (!session) throw new Error('Session not found');
-  const trimmed = coverLetterText.trim();
-  if (!trimmed) throw new Error('Cover letter is empty');
-  await updateSession(sessionId, sub.id, { cover_letter_text: trimmed });
-  return { cover_letter_text: trimmed };
+
+  const existing = parseResumeOutput(session.output_text);
+  const locked = capSkillGroupsToLines(applyLockedStructure(draft));
+  await updateSession(sessionId, sub.id, {
+    output_text: serializeResumeOutput({
+      version: 1,
+      draft: locked,
+      keywordAlignment: existing?.keywordAlignment ?? [],
+    }),
+    status: 'done',
+  });
+  return { draft: locked };
+}
+
+export async function fitResumeDraft(sessionId: string, draft: ResumeDraft) {
+  const sub = await requireSubscriber();
+  const session = await getTailoringSession(sessionId, sub.id);
+  if (!session) throw new Error('Session not found');
+
+  const existing = parseResumeOutput(session.output_text);
+  const fitted = fitResumeToPage(applyLockedStructure(draft));
+  await updateSession(sessionId, sub.id, {
+    output_text: serializeResumeOutput({
+      version: 1,
+      draft: fitted.draft,
+      keywordAlignment: existing?.keywordAlignment ?? [],
+    }),
+    status: 'done',
+  });
+  return fitted;
 }
 
 const MAX_REVISION_LENGTH = 1500;
@@ -324,7 +365,7 @@ export async function reviseTailoredDraft(
   sessionId: string,
   revisionNotes: string,
   target: 'resume' | 'cover-letter',
-  currentResumeOutput?: string | null,
+  currentResumeDraft?: ResumeDraft | string | null,
   currentCoverLetter?: string | null
 ) {
   const sub = await requireSubscriber();
@@ -359,8 +400,18 @@ export async function reviseTailoredDraft(
 
   try {
     if (target === 'resume') {
-      const previousOutput = (currentResumeOutput ?? session.output_text ?? '').trim();
-      if (!previousOutput) throw new Error('No resume draft to revise');
+      const previousDraft =
+        (typeof currentResumeDraft === 'object' && currentResumeDraft
+          ? currentResumeDraft
+          : null) ??
+        parseResumeOutput(
+          typeof currentResumeDraft === 'string' ? currentResumeDraft : session.output_text
+        )?.draft ??
+        plainTextToResumeDraft(
+          typeof currentResumeDraft === 'string' ? currentResumeDraft : session.output_text
+        ) ??
+        null;
+      if (!previousDraft) throw new Error('No resume draft to revise');
 
       const formatMeta =
         (resume.format_meta?.sectionOrder?.length ?? 0) > 0
@@ -376,7 +427,7 @@ export async function reviseTailoredDraft(
           extraContext: context,
           pageLength: pagePreference,
           formatMeta,
-          previousOutput,
+          previousDraft,
           revisionNotes: notes,
         }
       );
@@ -385,8 +436,10 @@ export async function reviseTailoredDraft(
       return { output_text, cover_letter_text: session.cover_letter_text };
     }
 
-    const previousBody = (currentCoverLetter ?? session.cover_letter_text ?? '').trim();
-    if (!previousBody) throw new Error('No cover letter draft to revise');
+    const previousBody = normalizeCoverLetterBody(
+      currentCoverLetter ?? session.cover_letter_text ?? ''
+    );
+    if (!previousBody.trim()) throw new Error('No cover letter draft to revise');
 
     const cover_letter_text = await generateCoverLetter(
       resume.content_text,
