@@ -33,7 +33,7 @@ export default async function ManualTailorPage({ params }: { params: Params }) {
   const backHref = application ? `/jobs/manual/${jobId}` : '/applications';
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
+    <main className="mx-auto max-w-5xl px-6 py-10">
       <Link href={backHref} className="text-sm text-zinc-500 hover:text-amber-300">
         {application ? '← Back to job' : '← Manual jobs'}
       </Link>

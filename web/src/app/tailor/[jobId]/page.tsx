@@ -54,7 +54,7 @@ export default async function TailorPage({ params }: { params: Params }) {
   const backHref = application ? `/jobs/${jobId}` : '/';
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
+    <main className="mx-auto max-w-5xl px-6 py-10">
       <BoardHomeLink from={backHref} className="text-sm text-zinc-500 hover:text-amber-300">
         {application ? '← Back to job' : '← Back to job board'}
       </BoardHomeLink>
