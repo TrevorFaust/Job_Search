@@ -360,7 +360,7 @@ function ContactOutreachSection({ contact }: { contact: FollowUpContact }) {
           onChange={(e) => setPromptText(e.target.value)}
           placeholder={
             mode === 'refine'
-              ? 'e.g. Shorter and less formal, mention my mock draft simulator, lead with curiosity about their product…'
+              ? 'e.g. Shorter and less formal, mention my NFL data platform, lead with curiosity about their product…'
               : 'e.g. We both went to Penn State, or I saw their post about fantasy football UX…'
           }
           rows={3}

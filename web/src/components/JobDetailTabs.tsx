@@ -87,8 +87,9 @@ export function JobDetailTabs({
 
   function setTab(next: JobDetailTab) {
     const params = new URLSearchParams(searchParams.toString());
-    if (next === 'description') params.delete('tab');
-    else params.set('tab', next);
+    // Always set tab explicitly. Clearing it falls back to defaultTab, which for
+    // applied jobs is materials/follow-up — so Description would never stick.
+    params.set('tab', next);
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }

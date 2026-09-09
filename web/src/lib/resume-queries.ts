@@ -1,6 +1,7 @@
 import { getDb } from './supabase';
 import { parseFitLevel, parseFitScore } from './fit-level';
 import { analyzeKeywords, type KeywordAnalysis } from './resume-keywords';
+import type { AtsAudit } from './ats-audit';
 import type { GapAnalysis, TailorAnswer, TailorQuestion } from './llm';
 import type { Job } from './queries';
 import type { ManualJob, ManualJobWithSession, TailorJobView } from './manual-jobs';
@@ -35,6 +36,7 @@ export type TailoringSession = {
   page_preference: 'one' | 'two';
   output_text: string | null;
   cover_letter_text: string | null;
+  ats_audit: AtsAudit | Record<string, never>;
   error_message: string | null;
   created_at: string;
   updated_at: string;
@@ -347,6 +349,7 @@ export async function updateSession(
       | 'page_preference'
       | 'output_text'
       | 'cover_letter_text'
+      | 'ats_audit'
       | 'error_message'
     >
   >

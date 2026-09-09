@@ -182,7 +182,20 @@ export function emptyKennametalJob(): ResumeJob {
   };
 }
 
-export function resumeFileName(jobTitle: string | null | undefined) {
-  const title = (jobTitle ?? 'Resume').replace(/[^\w\s.&+-]/g, '').replace(/\s+/g, ' ').trim();
-  return `${title} - Trevor Faust.pdf`;
+const CANDIDATE_NAME = 'Trevor Faust';
+
+/** Download basename: "Data Scientist - Trevor Faust" or "... - Cover letter". */
+export function resumeFileName(
+  jobTitle: string | null | undefined,
+  options?: { docType?: 'resume' | 'cover-letter'; format?: 'pdf' | 'docx' }
+) {
+  const title =
+    (jobTitle ?? 'Application').replace(/[<>:"/\\|?*]/g, '').replace(/\s+/g, ' ').trim() ||
+    'Application';
+  const base =
+    options?.docType === 'cover-letter'
+      ? `${title} - ${CANDIDATE_NAME} - Cover letter`
+      : `${title} - ${CANDIDATE_NAME}`;
+  const ext = options?.format ?? 'pdf';
+  return `${base}.${ext}`;
 }

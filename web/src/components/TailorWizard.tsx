@@ -1,16 +1,27 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import type { TailorJobView } from '@/lib/manual-jobs';
 import type { ApplicationStage } from '@/lib/applications';
 import type { TailoringSession } from '@/lib/resume-queries';
+import type { AtsAudit } from '@/lib/ats-audit';
+import {
+  blockerKey,
+  findingKey,
+  hasAtsFollowUps,
+  isAtsAudit,
+  rebuttalStateKey,
+} from '@/lib/ats-audit';
 import type { TailorAnswer, TailorQuestion } from '@/lib/llm';
 import { matchCandidateFact, withFactDrafts } from '@/lib/candidate-facts';
 import {
+  applyAtsImprovements,
+  dismissAtsFollowUps,
   fitResumeDraft,
   generateCoverLetterDraft,
   generateTailoredDraft,
+  refreshAtsAudit,
   reviseTailoredDraft,
   runGapAnalysis,
   saveCoverLetter,
@@ -231,16 +242,55 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
     initialSession.page_preference ?? 'one'
   );
   const [fitMessage, setFitMessage] = useState<string | null>(null);
+  const [atsAnswers, setAtsAnswers] = useState<Record<string, string>>(() => {
+    const audit = isAtsAudit(initialSession.ats_audit) ? initialSession.ats_audit : null;
+    const map: Record<string, string> = {};
+    for (const a of audit?.answers ?? []) map[a.question_id] = a.answer;
+    return withFactDrafts(audit?.questions ?? [], map);
+  });
+  const [atsRebuttals, setAtsRebuttals] = useState<Record<string, string>>(() => {
+    const audit = isAtsAudit(initialSession.ats_audit) ? initialSession.ats_audit : null;
+    const map: Record<string, string> = {};
+    for (const r of audit?.rebuttals ?? []) {
+      const kind = r.kind === 'blocker' ? 'blocker' : 'finding';
+      const id = r.target_id || (r as { finding_id?: string }).finding_id;
+      if (id) map[rebuttalStateKey(kind, id)] = r.rebuttal;
+    }
+    return map;
+  });
 
   const kw = session.keyword_analysis ?? { matched: [], partial: [], missing: [] };
   const gap = session.gap_analysis && 'summary' in session.gap_analysis ? session.gap_analysis : null;
   const questions = session.questions ?? [];
+  const atsAudit: AtsAudit | null = isAtsAudit(session.ats_audit) ? session.ats_audit : null;
   const step =
     session.status === 'done' && output
       ? 'done'
       : gap
         ? 'questions'
         : 'keywords';
+
+  // Stuck sessions that already applied once but still show follow-up forms — close them.
+  const autoClosedAts = useRef(false);
+  useEffect(() => {
+    if (autoClosedAts.current) return;
+    if (!atsAudit || !hasAtsFollowUps(atsAudit)) return;
+    const alreadyApplied =
+      (atsAudit.rebuttals?.length ?? 0) > 0 ||
+      atsAudit.score_before_apply != null ||
+      /rebuttal/i.test(atsAudit.evidence_notes ?? '');
+    if (!alreadyApplied) return;
+    autoClosedAts.current = true;
+    void dismissAtsFollowUps(session.id)
+      .then((result) => {
+        setAtsAnswers({});
+        setAtsRebuttals({});
+        setSession((s) => ({ ...s, ats_audit: result.ats_audit }));
+      })
+      .catch(() => {
+        autoClosedAts.current = false;
+      });
+  }, [atsAudit, session.id]);
 
   function handleAnalyze() {
     setError(null);
@@ -288,11 +338,17 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
           result.cover_letter_text ? normalizeCoverLetterBody(result.cover_letter_text) : ''
         );
         setFitMessage(null);
+        const audit = isAtsAudit(result.ats_audit) ? result.ats_audit : null;
+        const map: Record<string, string> = {};
+        for (const a of audit?.answers ?? []) map[a.question_id] = a.answer;
+        setAtsAnswers(withFactDrafts(audit?.questions ?? [], map));
+        setAtsRebuttals({});
         setSession((s) => ({
           ...s,
           status: 'done',
           output_text: result.output_text,
           cover_letter_text: result.cover_letter_text,
+          ats_audit: result.ats_audit ?? {},
           extra_context: extraContext.trim(),
           page_preference: pagePreference,
         }));
@@ -362,6 +418,8 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
           setOutput(result.output_text);
           setResumeDraft(resolveResumeFromOutput(result.output_text)?.draft ?? null);
           setFitMessage(null);
+          setAtsAnswers({});
+          setAtsRebuttals({});
         }
         if (target === 'cover-letter') {
           setCoverLetterOutput(normalizeCoverLetterBody(result.cover_letter_text ?? ''));
@@ -371,6 +429,9 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
           status: 'done',
           output_text: result.output_text,
           cover_letter_text: result.cover_letter_text ?? s.cover_letter_text,
+          ...(target === 'resume' && result.ats_audit
+            ? { ats_audit: result.ats_audit }
+            : {}),
         }));
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Revision failed');
@@ -378,7 +439,59 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
     });
   }
 
+  function handleApplyAts() {
+    setError(null);
+    const qs = atsAudit?.questions ?? [];
+    const payload: TailorAnswer[] = qs.map((q) => ({
+      question_id: q.id,
+      answer: atsAnswers[q.id]?.trim() ?? '',
+      question: q.question,
+      related_requirement: q.related_requirement,
+    }));
+    const findingRebuttals = (atsAudit?.findings ?? [])
+      .map((f) => ({
+        target_id: findingKey(f),
+        kind: 'finding' as const,
+        rebuttal: (atsRebuttals[rebuttalStateKey('finding', findingKey(f))] ?? '').trim(),
+      }))
+      .filter((r) => r.rebuttal.length > 0);
+    const blockerRebuttals = (atsAudit?.soft_blockers ?? [])
+      .map((b) => ({
+        target_id: blockerKey(b),
+        kind: 'blocker' as const,
+        rebuttal: (atsRebuttals[rebuttalStateKey('blocker', blockerKey(b))] ?? '').trim(),
+      }))
+      .filter((r) => r.rebuttal.length > 0);
+    const rebuttals = [...findingRebuttals, ...blockerRebuttals];
+
+    if (payload.every((a) => !a.answer) && rebuttals.length === 0) {
+      setError('Answer a question or rebut a finding/blocker before applying.');
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        if (resumeDraft) await saveResumeDraft(session.id, resumeDraft);
+        const result = await applyAtsImprovements(session.id, payload, rebuttals, resumeDraft);
+        setOutput(result.output_text);
+        setResumeDraft(resolveResumeFromOutput(result.output_text)?.draft ?? null);
+        setFitMessage(null);
+        setAtsAnswers({});
+        setAtsRebuttals({});
+        setSession((s) => ({
+          ...s,
+          status: 'done',
+          output_text: result.output_text,
+          ats_audit: result.ats_audit,
+        }));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'ATS improvement failed');
+      }
+    });
+  }
+
   const keywordAlignment = parseResumeOutput(output)?.keywordAlignment ?? [];
+  const atsNeedsInput = atsAudit ? hasAtsFollowUps(atsAudit) : false;
 
   return (
     <div className="space-y-8">
@@ -545,10 +658,246 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
               disabled={pending}
               className="rounded-lg bg-amber-400 px-5 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-amber-300 disabled:opacity-50"
             >
-              {pending ? 'Generating drafts…' : 'Generate resume & cover letter'}
+              {pending ? 'Generating drafts + ATS…' : 'Generate resume & cover letter'}
             </button>
           </section>
         </>
+      )}
+
+      {step === 'done' && output && atsAudit && (
+        <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-zinc-100">ATS screen audit</h2>
+              <p className="mt-1 text-sm text-zinc-500">
+              Evidence-weighted review. Soft blockers set the honest ceiling — after patches, your
+              score should match that ceiling. Path notes are only about breaking above it.
+            </p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs uppercase tracking-wide text-zinc-500">
+                {atsAudit.score_before_apply != null || atsAudit.follow_ups_closed
+                  ? 'Score after updates'
+                  : 'ATS score'}
+              </p>
+              <p className="font-[family-name:var(--font-display)] text-3xl font-bold text-amber-300">
+                {atsAudit.score}%
+              </p>
+              <p className="text-xs text-zinc-500">
+                ceiling {atsAudit.ceiling}%
+                {atsAudit.score_before_apply != null
+                  ? ` · was ${atsAudit.score_before_apply}% before your updates`
+                  : atsAudit.score_before_patches != null
+                    ? ` · was ${atsAudit.score_before_patches}% before auto-patches`
+                    : ''}
+              </p>
+            </div>
+          </div>
+
+          {!atsNeedsInput && (
+            <div className="space-y-2">
+              <p className="rounded-lg border border-emerald-800/60 bg-emerald-950/30 px-3 py-2 text-sm text-emerald-200">
+                Final ATS screen for this draft. Score and notes below are the summary — review the
+                resume, then download when ready.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  startTransition(async () => {
+                    try {
+                      if (resumeDraft) await saveResumeDraft(session.id, resumeDraft);
+                      const result = await refreshAtsAudit(session.id, resumeDraft);
+                      setOutput(result.output_text);
+                      setResumeDraft(resolveResumeFromOutput(result.output_text)?.draft ?? null);
+                      setAtsAnswers({});
+                      setAtsRebuttals({});
+                      setSession((s) => ({
+                        ...s,
+                        output_text: result.output_text,
+                        ats_audit: result.ats_audit,
+                      }));
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : 'ATS refresh failed');
+                    }
+                  });
+                }}
+                disabled={pending}
+                className="text-xs text-zinc-500 underline-offset-2 hover:text-amber-300 hover:underline disabled:opacity-50"
+              >
+                {pending ? 'Refreshing ATS…' : 'Refresh ATS score on this draft'}
+              </button>
+            </div>
+          )}
+
+          {atsAudit.evidence_notes ? (
+            <p className="text-sm text-zinc-300">{atsAudit.evidence_notes}</p>
+          ) : null}
+
+          <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+              Above this ceiling
+            </p>
+            <p className="mt-1 text-sm text-zinc-300">{atsAudit.path_to_target}</p>
+          </div>
+
+          {atsAudit.ceiling_reasons.length > 0 && (
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                Why the ceiling is {atsAudit.ceiling}%
+              </p>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-zinc-400">
+                {atsAudit.ceiling_reasons.map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {atsNeedsInput && atsAudit.soft_blockers.length > 0 && (
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-amber-500/90">
+                Soft blockers
+              </p>
+              <p className="mt-1 text-xs text-zinc-500">
+                These cap the ceiling when true. If one is inaccurate, rebut it — we&apos;ll
+                recalculate and patch when justified.
+              </p>
+              <ul className="mt-2 space-y-3 text-sm text-zinc-400">
+                {atsAudit.soft_blockers.map((b) => {
+                  const key = blockerKey(b);
+                  const stateKey = rebuttalStateKey('blocker', key);
+                  return (
+                    <li key={key} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+                      <p>
+                        <span className="text-zinc-200">{b.requirement}</span> — {b.reason}
+                      </p>
+                      {b.honest_approach ? (
+                        <span className="mt-1 block text-xs text-zinc-500">
+                          Approach: {b.honest_approach}
+                        </span>
+                      ) : null}
+                      <label className="mt-2 block text-xs text-zinc-500" htmlFor={`blocker-${key}`}>
+                        Rebuttal (optional)
+                      </label>
+                      <textarea
+                        id={`blocker-${key}`}
+                        value={atsRebuttals[stateKey] ?? ''}
+                        onChange={(e) =>
+                          setAtsRebuttals((prev) => ({ ...prev, [stateKey]: e.target.value }))
+                        }
+                        rows={2}
+                        placeholder='e.g. "I have 5 years of AWS across Kennametal and side projects"'
+                        className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-100"
+                      />
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+
+          {atsNeedsInput && atsAudit.findings.length > 0 && (
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Findings</p>
+              <p className="mt-1 text-xs text-zinc-500">
+                Informational notes are fine to ignore. If a finding is wrong, rebut it briefly.
+              </p>
+              <ul className="mt-2 space-y-3 text-sm text-zinc-400">
+                {atsAudit.findings.map((f) => {
+                  const key = findingKey(f);
+                  const stateKey = rebuttalStateKey('finding', key);
+                  return (
+                    <li key={key} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+                      <p>
+                        <span
+                          className={
+                            f.severity === 'high'
+                              ? 'text-rose-300'
+                              : f.severity === 'low'
+                                ? 'text-zinc-500'
+                                : 'text-amber-200'
+                          }
+                        >
+                          {f.severity}
+                        </span>{' '}
+                        · <span className="text-zinc-200">{f.issue}</span>
+                      </p>
+                      {f.fix ? (
+                        <span className="mt-1 block text-xs text-zinc-500">Fix: {f.fix}</span>
+                      ) : null}
+                      <label className="mt-2 block text-xs text-zinc-500" htmlFor={`rebut-${key}`}>
+                        Rebuttal (optional)
+                      </label>
+                      <textarea
+                        id={`rebut-${key}`}
+                        value={atsRebuttals[stateKey] ?? ''}
+                        onChange={(e) =>
+                          setAtsRebuttals((prev) => ({ ...prev, [stateKey]: e.target.value }))
+                        }
+                        rows={2}
+                        placeholder='e.g. "Actually I owned the Jenkins pipeline at Kennametal for 2 years"'
+                        className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-100"
+                      />
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+
+          {atsAudit.auto_patches_applied.length > 0 && (
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-emerald-500/90">
+                Auto-patched without asking
+              </p>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-zinc-400">
+                {atsAudit.auto_patches_applied.map((p) => (
+                  <li key={p}>{p}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {atsNeedsInput ? (
+            <div className="space-y-3 border-t border-zinc-800 pt-4">
+              {atsAudit.questions.length > 0 ? (
+                <>
+                  <div>
+                    <h3 className="text-sm font-semibold text-zinc-100">Quick ATS questions</h3>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      Optional. Chip answers or finding/blocker rebuttals above — one Apply pushes
+                      the resume as far as honesty allows, then follow-ups close.
+                    </p>
+                  </div>
+                  {atsAudit.questions.map((q, i) => (
+                    <QuestionField
+                      key={q.id}
+                      index={i}
+                      total={atsAudit.questions.length}
+                      question={q}
+                      value={atsAnswers[q.id] ?? ''}
+                      onChange={(value) => setAtsAnswers((prev) => ({ ...prev, [q.id]: value }))}
+                    />
+                  ))}
+                </>
+              ) : (
+                <p className="text-sm text-zinc-500">
+                  Optional rebuttals above. Apply once to patch and lock this ATS screen — skipped
+                  items are treated as accepted.
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={handleApplyAts}
+                disabled={pending}
+                className="rounded-lg bg-amber-400 px-5 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-amber-300 disabled:opacity-50"
+              >
+                {pending ? 'Applying ATS updates…' : 'Apply ATS improvements'}
+              </button>
+            </div>
+          ) : null}
+        </section>
       )}
 
       {step === 'done' && output && (

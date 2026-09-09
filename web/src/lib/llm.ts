@@ -17,6 +17,7 @@ import { FILL_IF_SLACK_PT, type ResumeDraft, type ResumeSessionOutput } from './
 import { CANDIDATE_FACTS } from './candidate-facts';
 import { normalizeFitScore } from './fit-level';
 import type { FitLevel } from './fit-level';
+import type { AtsAudit, AtsFinding, AtsSoftBlocker } from './ats-audit';
 
 export type GapItem = {
   skill: string;
@@ -63,7 +64,11 @@ export type GenerateOptions = {
   formatMeta?: ResumeFormatMeta;
   previousDraft?: ResumeDraft | null;
   revisionNotes?: string;
+  /** Skip the post-generate expand/fill LLM passes (use for targeted ATS patches). */
+  skipFillPasses?: boolean;
 };
+
+const MAX_ATS_QUESTIONS = 5;
 
 export type CoverLetterOptions = {
   extraContext?: string;
@@ -234,7 +239,7 @@ Default packed page (use this unless the job is purely product/design and projec
 - Extra employers: ONLY if clearly relevant (Penn State energy research for energy roles).
 - projects: 1-2 projects typical; the primary one (DraftDNA / NFL platform) gets 4-5 bullets. A second project (newsletter, job-board tooling) gets 2-3 when it maps to the JD.
 - Prefer extra bullets that prove depth for THIS job: methods, stakeholders, scale, tools used in context. Do not invent metrics.
-- Project titles are italic AND underlined. Put the URL on the SAME line as the title, e.g. "NFL Data Platform & Mock Draft Simulator (draftdna.com)". Do NOT emit a subtitle field. Do NOT put stack on its own line (no "draftdna.com, Python, PostgreSQL, ..."). If the JD cares about the stack, one bullet may name Python, PostgreSQL, Supabase, React, TypeScript, Tailwind.
+- Project titles are italic AND underlined. Put the URL on the SAME line as the title, e.g. "NFL Data Platform (draftdna.com)". Title it as the NFL data platform only — do NOT put "Mock Draft Simulator" in the project title (mock draft can be one bullet if relevant). Newsletter / job-board tooling stays a separate second project when it maps to the JD. Do NOT emit a subtitle field. Do NOT put stack on its own line (no "draftdna.com, Python, PostgreSQL, ..."). If the JD cares about the stack, one bullet may name Python, PostgreSQL, Supabase, React, TypeScript, Tailwind.
 - skills: exactly TWO groups. Keep a solid tool list, but each group's items (joined with " | ") must wrap to AT MOST 2 lines. Headings do not count. About 6-9 concise tools per group is typical; never a keyword dump.
 - Do NOT stuff job-description keywords into Relevant Skills. Mirror JD language in profile, experience bullets, and project bullets where it is true. Skills are an inventory of tools Trevor actually uses, ordered with the most relevant first.
 - If the page has room, expand Channel Rep, Process Engineer, or projects. Never grow skills past 2 lines to fill space.
@@ -252,6 +257,7 @@ const REVISE_GENERATE_SYSTEM = `You revise an existing tailored resume JSON base
 - Keep bullets, sections, and wording that still work. Preserve the same one-page density unless they ask to shorten.
 - Header and education are locked. Do not emit them in JSON.
 - Same Kennametal structure, section order, and skills rules as the original tailored resume.
+- Keep profile short: 2-3 sentences, at most 4-5 wrapped lines. Prefer experience/project bullets for new evidence — never balloon the profile.
 - NEVER invent employers, titles, dates, degrees, metrics, or skills.
 - If a requested change would require invented experience, keep the original wording for that part.
 
@@ -265,7 +271,8 @@ ${PUNCTUATION_RULE}
 
 - Keep the same header and education text. Do not rewrite name, contact, or school lines.
 - Keep profile at 2-3 sentences wrapping to about 4-5 lines. Do not add a fourth sentence.
-- No project subtitle. DraftDNA title must include (draftdna.com) on the same line.
+- NEVER expand the profile past 4-5 lines. Prefer putting new evidence in experience/project bullets, not the profile.
+- No project subtitle. DraftDNA title is "NFL Data Platform (draftdna.com)" on the same line — never "Mock Draft Simulator" in the title.
 - Tech stack is not its own line. Include it as a bullet only if the job posting cares about those tools.
 - Do NOT add skills items to fill the page. Each skills group must stay at most 2 wrapped lines. Leave skills as they are unless they already overflow, in which case cut trailing tools.
 - ADD 1-2 NEW bullets. Keep existing bullets. Each new bullet should wrap to about 2 lines.
@@ -452,7 +459,7 @@ export async function generateTailoredResume(
       ],
       projects: [
         {
-          title: 'NFL Data Platform & Mock Draft Simulator (draftdna.com)',
+          title: 'NFL Data Platform (draftdna.com)',
           bullets: [{ text: 'accomplishment. Stack only here if relevant to the JD.', cutFirst: false }],
         },
       ],
@@ -499,19 +506,21 @@ export async function generateTailoredResume(
       draft = fitResumeToPage(draft).draft;
       layout = measureResumeDraft(draft);
     }
-    for (let pass = 0; pass < 3 && layout.fits && layout.slackPt > FILL_IF_SLACK_PT; pass++) {
-      const extraBullets = Math.max(1, Math.min(2, Math.round(layout.slackPt / 26)));
-      const before = countResumeBullets(draft);
-      draft = capSkillGroupsToLines(
-        await expandResumeDraft(draft, resumeText, job, extraBullets)
-      );
-      layout = measureResumeDraft(draft);
-      if (countResumeBullets(draft) <= before && layout.slackPt > FILL_IF_SLACK_PT) {
-        continue;
-      }
-      if (!layout.fits) {
-        draft = fitResumeToPage(draft).draft;
-        break;
+    if (!options.skipFillPasses) {
+      for (let pass = 0; pass < 3 && layout.fits && layout.slackPt > FILL_IF_SLACK_PT; pass++) {
+        const extraBullets = Math.max(1, Math.min(2, Math.round(layout.slackPt / 26)));
+        const before = countResumeBullets(draft);
+        draft = capSkillGroupsToLines(
+          await expandResumeDraft(draft, resumeText, job, extraBullets)
+        );
+        layout = measureResumeDraft(draft);
+        if (countResumeBullets(draft) <= before && layout.slackPt > FILL_IF_SLACK_PT) {
+          continue;
+        }
+        if (!layout.fits) {
+          draft = fitResumeToPage(draft).draft;
+          break;
+        }
       }
     }
   }
@@ -527,6 +536,427 @@ export async function generateTailoredResume(
     ),
   };
   return serializeResumeOutput(output);
+}
+
+const ATS_AUDIT_SYSTEM = `You are a strict ATS + recruiter screen auditor AND a careful resume editor.
+
+Score like a modern ATS plus a 30-second human skim. Weight evidence and context more than keyword stuffing:
+- ~55% evidence strength (bullets show ownership, tools in context, outcomes mapped to JD needs)
+- ~25% requirement coverage (skills/tools/domain present where truthful)
+- ~20% parse/scan clarity (titles, skills section, JD language mirrored when honest)
+
+CEILING vs SCORE (critical):
+- ceiling = the honest maximum for THIS candidate with known facts (soft blockers already baked in).
+- After you apply every safe patch, score MUST equal ceiling (or differ by at most 1).
+- NEVER leave score below ceiling with "do these edits to get there" homework. If 85 is reachable honestly, the patched draft must score ~85 now.
+- If you cannot honestly reach a number, LOWER the ceiling to what the patched draft actually earns. Do not advertise an unreachable ceiling.
+
+Rules:
+- NEVER invent employers, tools, degrees, certifications, or years of experience.
+- Soft blockers (years of experience, degrees, exact titles the candidate lacks) CAP the ceiling but do NOT invent claims.
+- Be aggressive about rephrasing EXISTING facts to surface buried keywords and stronger evidence — only from the tailored draft + master resume + Q&A.
+- PUSH TO THE HONEST CEILING IN ONE PASS. In patched_draft, implement every safe improvement (reorder bullets, sharpen outcomes, mirror JD language, surface buried tools). Prefer experience and project bullets for new evidence.
+- PROFILE HARD LIMIT: 2-3 sentences, at most 4-5 wrapped lines (~480 characters). Never expand the profile to absorb ATS keywords — put those in bullets/skills instead. If the current profile is already long, shorten it while patching.
+- path_to_target: only what would be needed to break ABOVE the ceiling (usually new real experience the candidate does not have yet) — not edits you could still make to reach the ceiling.
+- When safe patches exist, return patched_draft: the FULL updated resume sections (profile, experience, projects, skills) with targeted edits applied. Do not rewrite from scratch. If no safe patches, set patched_draft to null and set score = ceiling for the current draft.
+- auto_patch_notes: short list of what you changed in patched_draft. Empty if patched_draft is null.
+- questions: 0–5 SHORT questions (under 120 chars). Prefer yes/no or chip answers. ONLY ask when a missing fact could raise the ceiling itself. If prior_ats_answers or prior_rebuttals already cover a topic, do NOT re-ask it — questions must be []. suggested_answers: 2–4 chips of 1–4 words.
+- findings / soft_blockers: omit anything the candidate already rebutted or answered. Prefer empty arrays when prior_rebuttals / prior_ats_answers exist unless a brand-new gap appears.
+- score: screenability of the draft you return (patched if present) — integer 0–100. Must match ceiling after patches.
+- score_before_patches: score of the original draft before your edits (omit if no patches).
+- ceiling: honest max = score of the best honest patched draft (0–100).
+- Speak TO the candidate with "you"/"your".
+- JSON only. No markdown fences.`;
+
+const ATS_APPLY_SYSTEM = `You apply the candidate's ATS follow-up answers and rebuttals (to findings AND soft blockers) to an existing tailored resume, then re-score it.
+
+CEILING vs SCORE (critical):
+- After this pass, score MUST equal ceiling (or differ by at most 1).
+- Push every honest improvement now. Do not leave a gap between score and ceiling.
+- If something is unreachable honestly, lower the ceiling — do not keep score below an inflated ceiling.
+
+Rules:
+- Start from current_draft. Apply ONLY targeted patches — do not rewrite the whole resume.
+- NEVER invent employers, tools, degrees, certifications, or years of experience.
+- If an answer/rebuttal is No / n/a / Skip / empty, do not add that skill or claim.
+- If they rebut a "missing" finding with real experience, weave that into bullets/skills honestly using their words + master resume.
+- If they rebut a soft blocker (e.g. years/degree) with clarifying facts, raise the ceiling when justified, drop or soften that blocker, and surface the clarified experience on the resume when truthful.
+- PUSH TO THE HONEST CEILING IN THIS ONE PASS.
+- PROFILE HARD LIMIT: 2-3 sentences, at most 4-5 wrapped lines. Do not grow the profile; put new evidence in experience/project bullets.
+- path_to_target: only what would break ABOVE the new ceiling (new experience they still lack) — not remaining edits to reach the ceiling.
+- Return the full updated draft sections plus a fresh ATS audit of the UPDATED draft.
+- findings, soft_blockers, and questions MUST be empty arrays [] after this pass (follow-ups are closed). Put residual explanation in evidence_notes, path_to_target, and ceiling_reasons only.
+- Speak TO the candidate with "you"/"your".
+- JSON only. No markdown fences.
+- NEVER use em dashes or en dashes.`;
+
+function clampScore(n: unknown, fallback = 0): number {
+  const num = typeof n === 'number' ? n : Number(n);
+  if (!Number.isFinite(num)) return fallback;
+  return Math.max(0, Math.min(100, Math.round(num)));
+}
+
+function normalizeAtsQuestions(
+  questions: TailorQuestion[] | undefined,
+  resumeText: string,
+  max = MAX_ATS_QUESTIONS
+) {
+  return (questions ?? [])
+    .slice(0, max)
+    .map((q, i) => ({
+      id: q.id?.trim() || `ats_q${i + 1}`,
+      question: directVoice(String(q.question ?? '').trim(), resumeText).slice(0, 160),
+      context: String(q.context ?? '').trim().slice(0, 240),
+      related_requirement: String(q.related_requirement ?? '').trim().slice(0, 120),
+      suggested_answers: (q.suggested_answers ?? [])
+        .map((a) => String(a).trim())
+        .filter(Boolean)
+        .slice(0, 4),
+    }))
+    .filter((q) => q.question.length > 0);
+}
+
+function normalizeAtsFindings(
+  findings: Array<Partial<AtsFinding> & { id?: string }> | undefined,
+  resumeText: string
+): AtsFinding[] {
+  return (findings ?? []).slice(0, 8).map((f, i) => ({
+    id: String(f.id ?? `f${i + 1}`).trim() || `f${i + 1}`,
+    area: String(f.area ?? 'general').trim(),
+    severity: f.severity === 'high' || f.severity === 'low' ? f.severity : 'medium',
+    issue: directVoice(String(f.issue ?? '').trim(), resumeText),
+    fix: directVoice(String(f.fix ?? '').trim(), resumeText),
+  }));
+}
+
+function normalizeAtsAuditFields(
+  parsed: {
+    score?: number;
+    score_before_patches?: number;
+    ceiling?: number;
+    ceiling_reasons?: string[];
+    path_to_target?: string;
+    evidence_notes?: string;
+    findings?: Array<Partial<AtsFinding> & { id?: string }>;
+    soft_blockers?: AtsSoftBlocker[];
+    auto_patch_notes?: string[];
+    questions?: TailorQuestion[];
+  },
+  resumeText: string,
+  extras: Partial<AtsAudit> = {}
+): AtsAudit {
+  let score = clampScore(parsed.score, 0);
+  const before = parsed.score_before_patches != null ? clampScore(parsed.score_before_patches, score) : undefined;
+  let ceiling = clampScore(parsed.ceiling, score);
+  const patches = (parsed.auto_patch_notes ?? [])
+    .map((n) => String(n).trim())
+    .filter(Boolean)
+    .slice(0, 8);
+
+  // After honest patches, score should match ceiling (ceiling already includes soft blockers).
+  // Prefer reporting the reached ceiling over leaving a false "gap to your own ceiling."
+  if (score > ceiling) ceiling = score;
+  else if (patches.length > 0 && ceiling > score) score = ceiling;
+
+  return {
+    score,
+    score_before_patches: before,
+    ceiling,
+    ceiling_reasons: (parsed.ceiling_reasons ?? []).map((r) => String(r).trim()).filter(Boolean).slice(0, 6),
+    path_to_target: directVoice(
+      String(parsed.path_to_target ?? '').trim() ||
+        'Push evidence in bullets that already match the JD; do not invent tools or jobs.',
+      resumeText
+    ),
+    evidence_notes: directVoice(String(parsed.evidence_notes ?? '').trim(), resumeText),
+    findings: normalizeAtsFindings(parsed.findings, resumeText),
+    soft_blockers: (parsed.soft_blockers ?? []).slice(0, 6).map((b, i) => ({
+      id: String((b as { id?: string }).id ?? `b${i + 1}`).trim() || `b${i + 1}`,
+      requirement: String(b.requirement ?? '').trim(),
+      reason: directVoice(String(b.reason ?? '').trim(), resumeText),
+      honest_approach: directVoice(String(b.honest_approach ?? '').trim(), resumeText),
+    })),
+    auto_patches_applied: patches,
+    questions: normalizeAtsQuestions(parsed.questions, resumeText),
+    audited_at: new Date().toISOString(),
+    ...extras,
+  };
+}
+
+function applyPatchedSections(
+  draft: ResumeDraft,
+  patched: {
+    profile?: string;
+    experience?: ResumeDraft['experience'];
+    projects?: ResumeDraft['projects'];
+    skills?: ResumeDraft['skills'];
+  } | null | undefined
+): ResumeDraft | null {
+  if (!patched || typeof patched !== 'object') return null;
+  if (!patched.profile && !patched.experience && !patched.projects && !patched.skills) return null;
+  return preserveIdentityFields(
+    capSkillGroupsToLines(
+      applyLockedStructure({
+        header: draft.header,
+        education: draft.education,
+        profile: patched.profile ?? draft.profile,
+        experience: patched.experience ?? draft.experience,
+        projects: patched.projects ?? draft.projects,
+        skills: patched.skills ?? draft.skills,
+      })
+    ),
+    draft
+  );
+}
+
+export async function auditTailoredResumeForAts(
+  draft: ResumeDraft,
+  resumeText: string,
+  job: { title: string; company: string | null; description: string },
+  answers: TailorAnswer[],
+  priorAtsAnswers: TailorAnswer[] = [],
+  priorRebuttals: Array<{ target_id: string; kind: string; rebuttal: string; label?: string }> = [],
+  followUpsAlreadyClosed = false
+): Promise<{ audit: AtsAudit; patchedDraft: ResumeDraft | null }> {
+  const followUpsAlreadyDone =
+    followUpsAlreadyClosed ||
+    priorAtsAnswers.some((a) => a.answer.trim()) ||
+    priorRebuttals.length > 0;
+  const user = [
+    `Job title: ${job.title}`,
+    `Company: ${job.company ?? 'Unknown'}`,
+    '',
+    'Job description:',
+    job.description.slice(0, 8000),
+    '',
+    'Master resume (source of truth — do not invent beyond this + Q&A):',
+    resumeText.slice(0, 8000),
+    '',
+    'Tailored draft under review:',
+    JSON.stringify({
+      profile: draft.profile,
+      experience: draft.experience,
+      projects: draft.projects,
+      skills: draft.skills,
+    }),
+    '',
+    'Candidate Q&A already collected:',
+    JSON.stringify([...answers, ...priorAtsAnswers].slice(0, 40)),
+    '',
+    'Prior ATS rebuttals (authoritative — already handled; do not re-ask):',
+    JSON.stringify(priorRebuttals.slice(0, 20)),
+    '',
+    followUpsAlreadyDone
+      ? 'IMPORTANT: The candidate already answered/rebutted ATS follow-ups. Set questions, findings, and soft_blockers to []. Put residual limits only in ceiling_reasons / path_to_target / evidence_notes. Still patch toward the honest ceiling.'
+      : 'Ask short questions only for brand-new missing facts not covered above.',
+    '',
+    'Known project details (may inform questions, do not contradict):',
+    JSON.stringify(CANDIDATE_FACTS.slice(0, 12)),
+    '',
+    'Return JSON with this shape:',
+    JSON.stringify({
+      score: 84,
+      score_before_patches: 72,
+      ceiling: 84,
+      ceiling_reasons: ['JD wants 5+ years AWS; you have less — soft cap'],
+      path_to_target: 'Only what would break above the ceiling with new real experience.',
+      evidence_notes: 'Strong on analytics ownership; thin on cloud evidence.',
+      findings: followUpsAlreadyDone
+        ? []
+        : [
+            {
+              id: 'f1',
+              area: 'evidence',
+              severity: 'high',
+              issue: 'CI/CD is named in skills but not shown in a bullet',
+              fix: 'Add one Channel Rep or project bullet that shows pipeline ownership',
+            },
+          ],
+      soft_blockers: followUpsAlreadyDone
+        ? []
+        : [
+            {
+              id: 'b1',
+              requirement: '5+ years AWS',
+              reason: 'Soft years gate — cannot claim more than you have',
+              honest_approach: 'Emphasize depth of cloud-adjacent work without inflating tenure',
+            },
+          ],
+      auto_patch_notes: ['Named Power BI in an existing dashboard bullet'],
+      patched_draft: {
+        profile: 'updated profile or null sections omitted',
+        experience: draft.experience,
+        projects: draft.projects,
+        skills: draft.skills,
+      },
+      questions: followUpsAlreadyDone
+        ? []
+        : [
+            {
+              id: 'ats_q1',
+              question: 'Have you used Terraform or CloudFormation on any project?',
+              context: 'JD lists IaC',
+              related_requirement: 'Terraform',
+              suggested_answers: ['Yes', 'No', 'Adjacent only'],
+            },
+          ],
+    }),
+  ].join('\n');
+
+  const raw = await claudeText(
+    ATS_AUDIT_SYSTEM,
+    `Audit and patch this tailored resume in one response. Push the draft to the honest ceiling — after patches, score must equal ceiling. Return JSON only.\n\n${user}`,
+    10000
+  );
+  if (!raw) throw new Error('Empty ATS audit response');
+
+  const parsed = parseJsonResponse<{
+    score?: number;
+    score_before_patches?: number;
+    ceiling?: number;
+    ceiling_reasons?: string[];
+    path_to_target?: string;
+    evidence_notes?: string;
+    findings?: Array<Partial<AtsFinding> & { id?: string }>;
+    soft_blockers?: AtsSoftBlocker[];
+    auto_patch_notes?: string[];
+    questions?: TailorQuestion[];
+    patched_draft?: {
+      profile?: string;
+      experience?: ResumeDraft['experience'];
+      projects?: ResumeDraft['projects'];
+      skills?: ResumeDraft['skills'];
+    } | null;
+  }>(raw);
+
+  const patchedDraft = applyPatchedSections(draft, parsed.patched_draft);
+  const audit = normalizeAtsAuditFields(parsed, resumeText);
+
+  if (patchedDraft) {
+    let fitted = patchedDraft;
+    const layout = measureResumeDraft(fitted);
+    if (!layout.fits) fitted = fitResumeToPage(fitted).draft;
+    return { audit, patchedDraft: fitted };
+  }
+
+  return { audit, patchedDraft: null };
+}
+
+/** One-shot: apply answers/rebuttals + return patched draft and fresh audit. */
+export async function applyAtsFeedbackToResume(
+  draft: ResumeDraft,
+  resumeText: string,
+  job: { title: string; company: string | null; description: string },
+  answers: TailorAnswer[],
+  rebuttals: Array<{
+    target_id: string;
+    kind: 'finding' | 'blocker';
+    rebuttal: string;
+    label?: string;
+  }>,
+  priorAudit: AtsAudit
+): Promise<{ output_text: string; audit: AtsAudit }> {
+  const user = [
+    `Job title: ${job.title}`,
+    `Company: ${job.company ?? 'Unknown'}`,
+    '',
+    'Job description:',
+    job.description.slice(0, 8000),
+    '',
+    'Master resume (source of truth):',
+    resumeText.slice(0, 8000),
+    '',
+    'Current tailored draft:',
+    JSON.stringify({
+      profile: draft.profile,
+      experience: draft.experience,
+      projects: draft.projects,
+      skills: draft.skills,
+    }),
+    '',
+    'Prior ATS audit (for context):',
+    JSON.stringify({
+      score: priorAudit.score,
+      ceiling: priorAudit.ceiling,
+      findings: priorAudit.findings,
+      soft_blockers: priorAudit.soft_blockers,
+      path_to_target: priorAudit.path_to_target,
+    }),
+    '',
+    'Candidate answers to ATS questions:',
+    JSON.stringify(answers),
+    '',
+    'Candidate rebuttals (kind=finding or blocker — treat as authoritative clarifications):',
+    JSON.stringify(rebuttals),
+    '',
+    'Return JSON with this shape:',
+    JSON.stringify({
+      score: 88,
+      ceiling: 92,
+      ceiling_reasons: ['…'],
+      path_to_target: 'Only remaining honest gaps that cannot be patched from known facts…',
+      evidence_notes: '…',
+      findings: [],
+      soft_blockers: [],
+      auto_patch_notes: ['Incorporated rebuttal about X into Channel Rep bullet 3'],
+      questions: [],
+      patched_draft: {
+        profile: draft.profile,
+        experience: draft.experience,
+        projects: draft.projects,
+        skills: draft.skills,
+      },
+    }),
+  ].join('\n');
+
+  const raw = await claudeText(
+    ATS_APPLY_SYSTEM,
+    `Apply ATS feedback, push the draft to the honest ceiling (score must equal ceiling), and re-score. Return JSON only.\n\n${user}`,
+    10000
+  );
+  if (!raw) throw new Error('Empty ATS apply response');
+
+  const parsed = parseJsonResponse<{
+    score?: number;
+    score_before_patches?: number;
+    ceiling?: number;
+    ceiling_reasons?: string[];
+    path_to_target?: string;
+    evidence_notes?: string;
+    findings?: Array<Partial<AtsFinding> & { id?: string }>;
+    soft_blockers?: AtsSoftBlocker[];
+    auto_patch_notes?: string[];
+    questions?: TailorQuestion[];
+    patched_draft?: {
+      profile?: string;
+      experience?: ResumeDraft['experience'];
+      projects?: ResumeDraft['projects'];
+      skills?: ResumeDraft['skills'];
+    } | null;
+  }>(raw);
+
+  const patched = applyPatchedSections(draft, parsed.patched_draft) ?? draft;
+  let fitted = patched;
+  const layout = measureResumeDraft(fitted);
+  if (!layout.fits) fitted = fitResumeToPage(fitted).draft;
+
+  const audit = normalizeAtsAuditFields(parsed, resumeText, {
+    answers,
+    rebuttals: rebuttals.map((r) => ({
+      target_id: r.target_id,
+      kind: r.kind,
+      rebuttal: r.rebuttal,
+    })),
+  });
+
+  return {
+    output_text: serializeResumeOutput({
+      version: 1,
+      draft: fitted,
+      keywordAlignment: [],
+    }),
+    audit,
+  };
 }
 
 async function expandResumeDraft(

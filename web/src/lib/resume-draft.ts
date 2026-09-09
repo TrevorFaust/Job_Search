@@ -21,6 +21,33 @@ import {
 /** ~2 wrapped Cambria 11pt lines on the skills content width. Server also font-caps. */
 const SKILLS_MAX_JOINED_CHARS = 200;
 
+/** Profile must stay a short blurb — never rival Experience for space (~4–5 wrapped lines). */
+const PROFILE_MAX_SENTENCES = 3;
+const PROFILE_MAX_CHARS = 480;
+
+export function clampProfileText(profile: string): string {
+  let text = stripEmDashes((profile ?? '').replace(/\s+/g, ' ').trim());
+  if (!text) return text;
+
+  const sentences =
+    text.match(/[^.!?]+[.!?]+|[^.!?]+$/g)?.map((s) => s.trim()).filter(Boolean) ?? [text];
+  if (sentences.length > PROFILE_MAX_SENTENCES) {
+    text = sentences.slice(0, PROFILE_MAX_SENTENCES).join(' ');
+  }
+  if (text.length <= PROFILE_MAX_CHARS) return text;
+
+  const clipped = text.slice(0, PROFILE_MAX_CHARS);
+  const lastStop = Math.max(
+    clipped.lastIndexOf('. '),
+    clipped.lastIndexOf('! '),
+    clipped.lastIndexOf('? ')
+  );
+  if (lastStop > PROFILE_MAX_CHARS * 0.55) {
+    return clipped.slice(0, lastStop + 1).trim();
+  }
+  return `${clipped.replace(/\s+\S*$/, '').trim()}…`;
+}
+
 function capSkillsItems(items: string[]): string[] {
   const out: string[] = [];
   for (const item of items) {
@@ -99,6 +126,12 @@ function withEducation(input: ResumeDraft): ResumeEducation {
 }
 function foldProjectTitle(title: string, subtitle?: string) {
   let next = stripEmDashes(title);
+  // Platform is the header; mock draft belongs in bullets, not the title.
+  next = next
+    .replace(/\s*&\s*Mock Draft Simulator\b/gi, '')
+    .replace(/\s+Mock Draft Simulator\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
   const extra = stripEmDashes(subtitle ?? '');
   const blob = `${next} ${extra}`;
   if (/draftdna\.com/i.test(blob) && !/draftdna\.com/i.test(next)) {
@@ -167,7 +200,7 @@ export function applyLockedStructure(input: ResumeDraft): ResumeDraft {
   return {
     header: withHeader(input),
     education: withEducation(input),
-    profile: stripEmDashes((input.profile ?? '').trim()),
+    profile: clampProfileText(input.profile ?? ''),
     experience: [lockedKennametal, ...extraJobs],
     projects: (input.projects ?? [])
       .filter((p) => p.title?.trim())

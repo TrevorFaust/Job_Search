@@ -196,6 +196,9 @@ alter table public.tailoring_sessions
 alter table public.tailoring_sessions
   add column if not exists manual_job_id uuid references public.manual_jobs(id) on delete cascade;
 
+alter table public.tailoring_sessions
+  add column if not exists ats_audit jsonb not null default '{}'::jsonb;
+
 alter table public.manual_jobs enable row level security;
 
 create table if not exists public.job_applications (

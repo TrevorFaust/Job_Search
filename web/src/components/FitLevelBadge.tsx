@@ -20,7 +20,7 @@ export function FitLevelBadge({ fitLevel, fitScore, estimated }: Props) {
     fitScore != null
       ? estimated
         ? `Estimated board fit: ${fitLevelLabel(fitLevel)} (~${formatFitScore(fitScore)}/10 from your experience corpus)`
-        : `Resume fit: ${fitLevelLabel(fitLevel)} (${formatFitScore(fitScore)}/10 likelihood with tailored resume)`
+        : `ATS-capped resume fit: ${fitLevelLabel(fitLevel)} (${formatFitScore(fitScore)}/10 from your tailored draft audit)`
       : estimated
         ? `Estimated board fit: ${fitLevelLabel(fitLevel)}`
         : `Resume fit: ${fitLevelLabel(fitLevel)}`;

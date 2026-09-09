@@ -453,13 +453,20 @@ async function fetchScrapedJobsPage(
 
 async function getVisibleManualJobs(
   subscriberId: string,
-  excludeManualJobIds?: Set<string>
+  excludeManualJobIds?: Set<string>,
+  filters?: JobFilters
 ): Promise<JobView[]> {
-  const manual = await fetchManualJobsForSubscriber(subscriberId);
-  if (!excludeManualJobIds?.size) return manual;
-  return manual.filter(
-    (j) => !j.manual_job_id || !excludeManualJobIds.has(j.manual_job_id)
-  );
+  let manual = await fetchManualJobsForSubscriber(subscriberId);
+  if (excludeManualJobIds?.size) {
+    manual = manual.filter(
+      (j) => !j.manual_job_id || !excludeManualJobIds.has(j.manual_job_id)
+    );
+  }
+  // Same recency/salary/work-type rules as scraped jobs (location uses memory path).
+  if (filters && hasActiveFilters(filters)) {
+    manual = applyJobFiltersSync(manual, filters);
+  }
+  return manual;
 }
 
 async function getAllJobsMemoryScan(
@@ -482,11 +489,13 @@ async function getAllJobsMemoryScan(
 
   // Manual jobs only belong on All / Preferred, not Priority.
   if (subscriberId && !options?.specialOnly) {
+    // Skip sync filters here — applyJobFiltersAsync/Sync below covers manuals + scraped together
+    // (including location radius).
     const manualJobs = await getVisibleManualJobs(subscriberId, excludeManualJobIds);
     jobs = [...manualJobs, ...jobs];
   }
   if (excludeJobIds?.size) {
-    jobs = jobs.filter((j) => !j.isManual && !excludeJobIds.has(j.id));
+    jobs = jobs.filter((j) => j.isManual || !excludeJobIds.has(j.id));
   }
   if (excludeManualJobIds?.size) {
     jobs = jobs.filter(
@@ -556,7 +565,7 @@ export async function getAllJobs(
   const categoryIds = filters?.categories ?? [];
   const manualVisible =
     subscriberId && !options?.specialOnly
-      ? await getVisibleManualJobs(subscriberId, excludeManualJobIds)
+      ? await getVisibleManualJobs(subscriberId, excludeManualJobIds, filters)
       : [];
   const manualOnPage = page === 1 ? manualVisible : [];
   const manualTotal = manualVisible.length;
@@ -575,7 +584,12 @@ export async function getAllJobs(
     options
   );
 
-  let jobs: JobView[] = [...manualOnPage, ...(scraped as JobView[])];
+  // Sort manuals with scraped rows so date filters don't leave old pasted jobs
+  // sitting above today's feed.
+  let jobs: JobView[] =
+    page === 1
+      ? sortJobs([...manualOnPage, ...(scraped as JobView[])], sort, { pinSpecial: false })
+      : (scraped as JobView[]);
   if (categoryIds.length) {
     jobs = filterByCategories(jobs, categoryIds);
   }

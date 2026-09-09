@@ -11,6 +11,7 @@ import {
   getTailoringSession,
   resolveJobForSession,
 } from '@/lib/resume-queries';
+import { resumeFileName } from '@/lib/resume-template';
 
 export const runtime = 'nodejs';
 
@@ -47,14 +48,7 @@ export async function GET(request: Request, { params }: { params: Params }) {
         : undefined;
 
   const job = await resolveJobForSession(session!, subscriber.id);
-  const baseName =
-    docType === 'cover-letter'
-      ? `Cover Letter - ${job?.title ?? 'Application'} - ${job?.company ?? 'Application'}`
-      : job
-        ? `Resume - ${job.title} - ${job.company ?? 'Application'}`
-        : 'Tailored resume';
-  const ext = format === 'pdf' ? 'pdf' : 'docx';
-  const safeName = `${baseName}.${ext}`.replace(/[^\w\s.-]/g, '').replace(/\s+/g, '-');
+  const safeName = resumeFileName(job?.title, { docType, format });
 
   let buffer: Buffer;
   if (docType === 'cover-letter') {
@@ -77,13 +71,14 @@ export async function GET(request: Request, { params }: { params: Params }) {
     }
   }
 
+  const encoded = encodeURIComponent(safeName);
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       'Content-Type':
         format === 'pdf'
           ? 'application/pdf'
           : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'Content-Disposition': `attachment; filename="${safeName}"`,
+      'Content-Disposition': `attachment; filename="${safeName.replace(/"/g, '')}"; filename*=UTF-8''${encoded}`,
     },
   });
 }
