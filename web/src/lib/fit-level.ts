@@ -23,6 +23,36 @@ export function parseFitScore(gapAnalysis: unknown): number | undefined {
   return normalizeFitScore((gapAnalysis as { fit_score?: unknown }).fit_score);
 }
 
+/** Band cuts aligned with board-fit estimate bands. */
+export function fitLevelFromScore(score: number): FitLevel {
+  if (score >= 7.5) return 'strong';
+  if (score >= 5.5) return 'moderate';
+  if (score >= 3.5) return 'stretch';
+  return 'long_shot';
+}
+
+/**
+ * Map ATS audit 0–100 score to board 0–10 fit.
+ * Uses min(score, ceiling) so the badge never exceeds the honest cap.
+ */
+export function fitFromAtsAudit(
+  atsAudit: unknown
+): { fit_level: FitLevel; fit_score: number } | undefined {
+  if (!atsAudit || typeof atsAudit !== 'object') return undefined;
+  const a = atsAudit as { score?: unknown; ceiling?: unknown };
+  const score = typeof a.score === 'number' && Number.isFinite(a.score) ? a.score : null;
+  const ceiling = typeof a.ceiling === 'number' && Number.isFinite(a.ceiling) ? a.ceiling : null;
+  if (score == null && ceiling == null) return undefined;
+
+  const percent =
+    score != null && ceiling != null ? Math.min(score, ceiling) : (score ?? ceiling!);
+  if (percent <= 0) return undefined;
+
+  const fit_score = normalizeFitScore(percent / 10);
+  if (fit_score == null) return undefined;
+  return { fit_score, fit_level: fitLevelFromScore(fit_score) };
+}
+
 export function formatFitScore(score: number): string {
   return score.toFixed(1);
 }

@@ -37,9 +37,11 @@ export default async function JobDetailPage({
     getJobById(jobId),
     token ? getSubscriberByToken(token) : Promise.resolve(null),
   ]);
-  if (!job || job.status !== 'active') notFound();
+  if (!job) notFound();
 
   const application = subscriber ? await getApplicationForJob(subscriber.id, jobId) : null;
+  // Board listings expire after ~6 weeks; applied jobs stay reachable from Applied.
+  if (job.status !== 'active' && !application) notFound();
   const session =
     application?.tailoring_session_id && subscriber
       ? await getTailoringSession(application.tailoring_session_id, subscriber.id)

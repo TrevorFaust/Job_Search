@@ -26,6 +26,7 @@ const getCachedCorpus = cache(loadCorpus);
  * Attach a stable board fit from the candidate experience corpus.
  * Does NOT use tailor gap_analysis — that score is for the wizard only and was
  * causing badges to drop after analysis.
+ * Preserves ATS-derived scores (fit_estimated === false) from Applied / tailor flows.
  */
 export async function hydrateFitLevels(subscriberId: string, jobs: JobView[]): Promise<JobView[]> {
   if (!jobs.length) return jobs;
@@ -40,6 +41,10 @@ export async function hydrateFitLevels(subscriberId: string, jobs: JobView[]): P
   }
 
   return jobs.map((job) => {
+    if (job.fit_estimated === false && job.fit_level && job.fit_score != null) {
+      return job;
+    }
+
     const estimate = estimateBoardFit(
       {
         title: job.title,

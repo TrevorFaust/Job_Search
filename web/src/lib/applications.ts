@@ -1,7 +1,7 @@
 import { getDb } from './supabase';
 import { applyJobFiltersAsync, paginate, sortJobs, BOARD_SCAN_LIMIT, type JobFilters } from './filters';
 import { filterByCategories } from './categories';
-import { parseFitLevel, parseFitScore } from './fit-level';
+import { fitFromAtsAudit, parseFitLevel, parseFitScore } from './fit-level';
 import { hydrateFitLevels } from './job-fit';
 import type { Job, JobView, PaginatedJobs, SortKey } from './queries';
 import { manualJobToBoardView } from './manual-jobs';
@@ -110,6 +110,22 @@ function toPaginated(jobs: JobView[], page: number): PaginatedJobs {
   return { jobs: items, total, page: p, totalPages };
 }
 
+/** Applied tab sorts by when you applied, not job posted_at / stage. */
+function sortAppliedJobs(jobs: JobView[], sort: SortKey): JobView[] {
+  if (sort === 'salary_high' || sort === 'salary_low') {
+    return sortJobs(jobs, sort, { pinSpecial: false });
+  }
+
+  const copy = [...jobs];
+  const appliedTime = (job: JobView) =>
+    new Date(job.applied_at ?? job.posted_at ?? job.created_at).getTime();
+
+  if (sort === 'date_asc') {
+    return copy.sort((a, b) => appliedTime(a) - appliedTime(b));
+  }
+  return copy.sort((a, b) => appliedTime(b) - appliedTime(a));
+}
+
 export async function getAppliedJobs(
   subscriberId: string,
   sort: SortKey,
@@ -128,7 +144,9 @@ export async function getAppliedJobs(
 
     let query = getDb()
       .from('job_applications')
-      .select('stage, applied_at, interview_prep, follow_up_contacts, tailoring_sessions(gap_analysis), jobs(*), manual_jobs(*)')
+      .select(
+        'stage, applied_at, interview_prep, follow_up_contacts, tailoring_sessions(gap_analysis, ats_audit), jobs(*), manual_jobs(*)'
+      )
       .eq('subscriber_id', subscriberId)
       .order('applied_at', { ascending: false });
 
@@ -141,9 +159,15 @@ export async function getAppliedJobs(
     for (const row of data as Record<string, unknown>[]) {
       const interviewPrep = (row.interview_prep as Record<string, unknown>) ?? {};
       const followUpContacts = (row.follow_up_contacts as Record<string, unknown>) ?? {};
-      const tailoringSession = row.tailoring_sessions as { gap_analysis?: unknown } | null;
-      const fitLevel = parseFitLevel(tailoringSession?.gap_analysis);
-      const fitScore = parseFitScore(tailoringSession?.gap_analysis);
+      const tailoringSession = row.tailoring_sessions as {
+        gap_analysis?: unknown;
+        ats_audit?: unknown;
+      } | null;
+      const atsFit = fitFromAtsAudit(tailoringSession?.ats_audit);
+      const fitLevel = atsFit?.fit_level ?? parseFitLevel(tailoringSession?.gap_analysis);
+      const fitScore = atsFit?.fit_score ?? parseFitScore(tailoringSession?.gap_analysis);
+      // ATS-derived scores are authoritative for Applied — don't let board hydrate overwrite them.
+      const fitEstimated = atsFit ? false : undefined;
       const manualJob = row.manual_jobs as ManualJob | null;
       if (manualJob) {
         jobs.push({
@@ -154,12 +178,15 @@ export async function getAppliedJobs(
           follow_up_contacts: followUpContacts,
           fit_level: fitLevel,
           fit_score: fitScore,
+          fit_estimated: fitEstimated,
         });
         continue;
       }
 
       const job = row.jobs as Job | null;
-      if (!job || job.status !== 'active') continue;
+      // Keep applied rows even after the board listing expires (6-week TTL).
+      // Only skip if the scraped job row is gone entirely.
+      if (!job) continue;
       jobs.push({
         ...job,
         application_stage: row.stage as ApplicationStage,
@@ -168,6 +195,7 @@ export async function getAppliedJobs(
         follow_up_contacts: followUpContacts,
         fit_level: fitLevel,
         fit_score: fitScore,
+        fit_estimated: fitEstimated,
       });
     }
 
@@ -177,7 +205,7 @@ export async function getAppliedJobs(
   let filtered = filterBySearch(jobs, q);
   if (filters) filtered = await applyJobFiltersAsync(filtered, filters);
   if (filters?.categories.length) filtered = filterByCategories(filtered, filters.categories);
-  filtered = sortJobs(filtered, sort, { pinSpecial: false });
+  filtered = sortAppliedJobs(filtered, sort);
   const paginated = toPaginated(filtered, page);
   paginated.jobs = await hydrateFitLevels(subscriberId, paginated.jobs);
   return paginated;

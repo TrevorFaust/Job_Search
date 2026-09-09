@@ -433,7 +433,14 @@ export function JobBoard({
             </p>
           ) : (
             jobs
-              .filter((job) => view === 'priority' || view === 'preferred' || !job.is_special)
+              // Priority/special roles are hidden on All; Applied must still list them.
+              .filter(
+                (job) =>
+                  view === 'priority' ||
+                  view === 'preferred' ||
+                  view === 'applied' ||
+                  !job.is_special
+              )
               .map((job) => {
               const matchedCategories =
                 view === 'preferred' ? matchJobToCategories(job, filters.categories) : [];
