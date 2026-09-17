@@ -272,3 +272,36 @@ create index if not exists dismissed_jobs_subscriber_idx
   on public.dismissed_jobs (subscriber_id, dismissed_at desc);
 
 alter table public.dismissed_jobs enable row level security;
+
+create table if not exists public.user_profiles (
+  subscriber_id uuid primary key references public.subscribers(id) on delete cascade,
+  display_name text not null default '',
+  location text not null default '',
+  contact_email text not null default '',
+  phone text not null default '',
+  linkedin_label text not null default '',
+  linkedin_url text not null default '',
+  github_label text not null default '',
+  github_url text not null default '',
+  website_label text not null default '',
+  website_url text not null default '',
+  willing_to_relocate boolean not null default false,
+  education jsonb not null default '{"schoolBold":"","schoolRest":"","degree":"","minors":""}'::jsonb,
+  experience jsonb not null default '[]'::jsonb,
+  projects jsonb not null default '[]'::jsonb,
+  skills jsonb not null default '[]'::jsonb,
+  projects_section_title text not null default 'PROJECTS',
+  context_notes text not null default '',
+  learned_facts jsonb not null default '[]'::jsonb,
+  preferred_categories text[] not null default '{}',
+  llm_provider text,
+  llm_model text,
+  llm_api_key_ciphertext text,
+  llm_api_key_last4 text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint user_profiles_llm_provider_chk
+    check (llm_provider is null or llm_provider in ('anthropic', 'openai'))
+);
+
+alter table public.user_profiles enable row level security;

@@ -14,6 +14,7 @@ import {
   rebuttalStateKey,
 } from '@/lib/ats-audit';
 import type { TailorAnswer, TailorQuestion } from '@/lib/llm';
+import type { CandidateFact } from '@/lib/candidate-facts';
 import { matchCandidateFact, withFactDrafts } from '@/lib/candidate-facts';
 import {
   applyAtsImprovements,
@@ -28,7 +29,7 @@ import {
   saveResumeDraft,
   saveTailorAnswers,
 } from '@/lib/resume-actions';
-import { composeCoverLetter, normalizeCoverLetterBody } from '@/lib/cover-letter';
+import { composeCoverLetter, normalizeCoverLetterBody, type CoverIdentity } from '@/lib/cover-letter';
 import { draftToPlainText, parseResumeOutput, resolveResumeFromOutput, serializeResumeOutput } from '@/lib/resume-draft';
 import type { ResumeDraft } from '@/lib/resume-template';
 import { MarkAppliedButton } from './MarkAppliedButton';
@@ -44,6 +45,11 @@ type Props = {
   initialReusedCount?: number;
   backHref?: string;
   applicationStage?: ApplicationStage;
+  identity?: {
+    displayName: string;
+    facts: CandidateFact[];
+    cover: CoverIdentity;
+  };
 };
 
 const QUICK_CHIPS = ['Yes', 'No', 'Not really', 'Skip'];
@@ -65,14 +71,16 @@ function QuestionField({
   question,
   value,
   onChange,
+  facts,
 }: {
   index: number;
   total: number;
   question: TailorQuestion;
   value: string;
   onChange: (value: string) => void;
+  facts?: CandidateFact[];
 }) {
-  const factAnswer = matchCandidateFact(question)?.answer;
+  const factAnswer = matchCandidateFact(question, facts)?.answer;
   const usingNotes = Boolean(factAnswer && value === factAnswer);
   const chips: string[] = [];
   if (factAnswer) chips.push('Project notes');
@@ -209,7 +217,14 @@ function KeywordPills({ label, terms, tone }: { label: string; terms: string[]; 
   );
 }
 
-export function TailorWizard({ job, session: initialSession, initialReusedCount = 0, backHref = '/', applicationStage }: Props) {
+export function TailorWizard({
+  job,
+  session: initialSession,
+  initialReusedCount = 0,
+  backHref = '/',
+  applicationStage,
+  identity,
+}: Props) {
   const [session, setSession] = useState(initialSession);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -217,7 +232,7 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
   const [answers, setAnswers] = useState<Record<string, string>>(() => {
     const map: Record<string, string> = {};
     for (const a of initialSession.answers ?? []) map[a.question_id] = a.answer;
-    return withFactDrafts(initialSession.questions ?? [], map);
+    return withFactDrafts(initialSession.questions ?? [], map, identity?.facts);
   });
   const [output, setOutput] = useState(initialSession.output_text ?? '');
   const [coverLetterOutput, setCoverLetterOutput] = useState(
@@ -246,7 +261,7 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
     const audit = isAtsAudit(initialSession.ats_audit) ? initialSession.ats_audit : null;
     const map: Record<string, string> = {};
     for (const a of audit?.answers ?? []) map[a.question_id] = a.answer;
-    return withFactDrafts(audit?.questions ?? [], map);
+    return withFactDrafts(audit?.questions ?? [], map, identity?.facts);
   });
   const [atsRebuttals, setAtsRebuttals] = useState<Record<string, string>>(() => {
     const audit = isAtsAudit(initialSession.ats_audit) ? initialSession.ats_audit : null;
@@ -299,7 +314,7 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
         const result = await runGapAnalysis(session.id);
         const prefilled: Record<string, string> = {};
         for (const a of result.answers ?? []) prefilled[a.question_id] = a.answer;
-        setAnswers((prev) => withFactDrafts(result.questions, { ...prev, ...prefilled }));
+        setAnswers((prev) => withFactDrafts(result.questions, { ...prev, ...prefilled }, identity?.facts));
         setReusedCount(result.reusedCount ?? 0);
         setSession((s) => ({
           ...s,
@@ -341,7 +356,7 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
         const audit = isAtsAudit(result.ats_audit) ? result.ats_audit : null;
         const map: Record<string, string> = {};
         for (const a of audit?.answers ?? []) map[a.question_id] = a.answer;
-        setAtsAnswers(withFactDrafts(audit?.questions ?? [], map));
+        setAtsAnswers(withFactDrafts(audit?.questions ?? [], map, identity?.facts));
         setAtsRebuttals({});
         setSession((s) => ({
           ...s,
@@ -616,6 +631,7 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
                   question={q}
                   value={answers[q.id] ?? ''}
                   onChange={(value) => setAnswers((prev) => ({ ...prev, [q.id]: value }))}
+                  facts={identity?.facts}
                 />
               ))
             )}
@@ -878,6 +894,7 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
                       question={q}
                       value={atsAnswers[q.id] ?? ''}
                       onChange={(value) => setAtsAnswers((prev) => ({ ...prev, [q.id]: value }))}
+                      facts={identity?.facts}
                     />
                   ))}
                 </>
@@ -940,7 +957,7 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
                         ? resumeDraft
                           ? draftToPlainText(resumeDraft)
                           : output
-                        : composeCoverLetter(coverLetterOutput)
+                        : composeCoverLetter(coverLetterOutput, undefined, identity?.cover)
                     )
                   }
                   className="rounded-lg border border-zinc-600 px-3 py-1.5 text-sm text-zinc-300 hover:border-amber-500/50"
@@ -1024,6 +1041,8 @@ export function TailorWizard({ job, session: initialSession, initialReusedCount 
               onChange={setCoverLetterOutput}
               saving={coverSaving}
               saved={coverSaved}
+              headerLines={identity ? [identity.cover.name, identity.cover.locationContact, identity.cover.profiles] : undefined}
+              candidateName={identity?.displayName}
             />
           ) : (
             <p className="rounded-lg border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-500">

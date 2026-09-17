@@ -11,6 +11,7 @@ import {
   type FollowUpContactChannel,
   type GapAnalysis,
 } from './llm';
+import { withUserAi } from './user-ai';
 import { runFollowUpSearches } from './follow-up-search';
 import { extractLinkedInContactsFromSearches, extractContactsForNamesFromSearches } from './follow-up-linkedin-extract';
 import { formatSearchResultsForLlm } from './web-search';
@@ -375,7 +376,8 @@ export async function generateFollowUpContactsForJob(
   const searchResultsText = formatSearchResultsForLlm(searches);
   const linkedInExtracted = extractLinkedInContactsFromSearches(searches, job.company, job);
 
-  const result = await generateFollowUpContacts({
+  const result = await withUserAi(sub, () =>
+    generateFollowUpContacts({
     resumeText: resume.content_text,
     job,
     gapAnalysis,
@@ -383,7 +385,8 @@ export async function generateFollowUpContactsForJob(
     guessedEmailDomain: guessedDomain,
     searchMode: mergeExisting ? 'adjacent' : 'primary',
     excludeNames: mergeExisting ? existing?.contacts.map((c) => c.name) : undefined,
-  });
+    })
+  );
 
   const overviewNames = parsePersonNamesFromOverview(result.overview);
   const overviewExtracted =
@@ -694,7 +697,8 @@ export async function draftFollowUpContactMessages(
   if (index < 0) throw new Error('Contact not found');
 
   const contact = stored.contacts[index]!;
-  const drafted = await draftFollowUpContactMessage({
+  const drafted = await withUserAi(sub, () =>
+    draftFollowUpContactMessage({
     resumeText: resume.content_text,
     job,
     gapAnalysis,
@@ -707,7 +711,8 @@ export async function draftFollowUpContactMessages(
           follow_up_message: contact.follow_up_message,
         }
       : undefined,
-  });
+    })
+  );
 
   const updatedContacts = stored.contacts.map((c, i) =>
     i === index

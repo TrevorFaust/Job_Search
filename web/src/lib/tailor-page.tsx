@@ -11,9 +11,17 @@ import {
 import { getAnswerBank, mergeQuestionsWithBank } from './tailor-answer-bank';
 import type { ManualJob } from './manual-jobs';
 import type { TailoringSession } from './resume-queries';
+import type { CandidateFact } from './candidate-facts';
+import type { CoverIdentity } from './cover-letter';
+import {
+  getOrCreateUserProfile,
+  llmStatusForUser,
+  toCandidateIdentity,
+} from './user-profile';
 
 type PrepareResult =
   | { kind: 'no_resume'; element: ReactNode }
+  | { kind: 'no_llm'; element: ReactNode }
   | { kind: 'not_found' }
   | { kind: 'no_description'; element: ReactNode }
   | {
@@ -21,6 +29,11 @@ type PrepareResult =
       session: TailoringSession;
       initialReusedCount: number;
       manualJob?: ManualJob;
+      identity: {
+        displayName: string;
+        facts: CandidateFact[];
+        cover: CoverIdentity;
+      };
     };
 
 export async function prepareTailorSession(opts: {
@@ -46,6 +59,30 @@ export async function prepareTailorSession(opts: {
             className="mt-6 inline-block rounded-lg bg-amber-400 px-5 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-amber-300"
           >
             Add resume
+          </Link>
+        </main>
+      ),
+    };
+  }
+
+  const llm = await llmStatusForUser(opts.subscriberId);
+  if (!llm.ready) {
+    return {
+      kind: 'no_llm',
+      element: (
+        <main className="mx-auto max-w-lg px-6 py-20 text-center">
+          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-zinc-50">
+            Add your own API key
+          </h1>
+          <p className="mt-3 text-sm text-zinc-500">
+            Tailoring is billed to each user. Save an Anthropic or OpenAI key in Profile so this
+            does not run on the site owner&apos;s account.
+          </p>
+          <Link
+            href={`/settings/${opts.editToken}#billing`}
+            className="mt-6 inline-block rounded-lg bg-amber-400 px-5 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-amber-300"
+          >
+            Add API key
           </Link>
         </main>
       ),
@@ -112,5 +149,18 @@ export async function prepareTailorSession(opts: {
     ).length;
   }
 
-  return { kind: 'ready', session, initialReusedCount, manualJob };
+  const profile = await getOrCreateUserProfile(opts.subscriberId);
+  const identity = toCandidateIdentity(profile);
+
+  return {
+    kind: 'ready',
+    session,
+    initialReusedCount,
+    manualJob,
+    identity: {
+      displayName: identity.displayName,
+      facts: identity.facts,
+      cover: identity.cover,
+    },
+  };
 }

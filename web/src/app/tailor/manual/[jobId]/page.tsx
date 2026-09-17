@@ -25,6 +25,7 @@ export default async function ManualTailorPage({ params }: { params: Params }) {
   });
 
   if (prepared.kind === 'no_resume') return prepared.element;
+  if (prepared.kind === 'no_llm') return prepared.element;
   if (prepared.kind === 'not_found') notFound();
   if (prepared.kind === 'no_description') return prepared.element;
 
@@ -44,6 +45,7 @@ export default async function ManualTailorPage({ params }: { params: Params }) {
           initialReusedCount={prepared.initialReusedCount}
           backHref={backHref}
           applicationStage={application?.stage}
+          identity={prepared.identity}
         />
       </div>
     </main>

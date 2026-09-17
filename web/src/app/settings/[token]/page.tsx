@@ -2,8 +2,10 @@ import Link from 'next/link';
 import { BoardHomeLink } from '@/components/BoardHomeLink';
 import { ProfileEditor } from '@/components/ProfileEditor';
 import { ResumeEditor } from '@/components/ResumeEditor';
+import { UserProfileEditor } from '@/components/UserProfileEditor';
 import { getProfiles, getSubscriberByToken } from '@/lib/queries';
 import { getActiveResume } from '@/lib/resume-queries';
+import { getPublicUserProfile, isOwnerEmail } from '@/lib/user-profile';
 
 type Params = Promise<{ token: string }>;
 
@@ -22,9 +24,10 @@ export default async function SettingsPage({ params }: { params: Params }) {
     );
   }
 
-  const [profiles, resume] = await Promise.all([
+  const [profiles, resume, userProfile] = await Promise.all([
     getProfiles(subscriber.id),
     getActiveResume(subscriber.id),
+    getPublicUserProfile(subscriber.id, subscriber.email),
   ]);
 
   return (
@@ -34,27 +37,44 @@ export default async function SettingsPage({ params }: { params: Params }) {
           ← Back to job board
         </BoardHomeLink>
         <h1 className="mt-4 font-[family-name:var(--font-display)] text-3xl font-bold text-zinc-50">
-          Settings
+          Profile & settings
         </h1>
         <p className="mt-2 text-sm text-zinc-500">
-          {subscriber.email} · Resume tailoring + digest preferences
+          {subscriber.email} · identity, preferred jobs, resume, digest, and your own API key
         </p>
+        <nav className="mt-4 flex flex-wrap gap-3 text-xs text-zinc-500">
+          <a href="#profile" className="hover:text-amber-300">Profile</a>
+          <a href="#preferred" className="hover:text-amber-300">Preferred jobs</a>
+          <a href="#billing" className="hover:text-amber-300">AI billing</a>
+          <a href="#resume" className="hover:text-amber-300">Master resume</a>
+          <a href="#digest" className="hover:text-amber-300">Digest emails</a>
+        </nav>
       </header>
 
-      <section id="resume" className="mb-12 scroll-mt-8">
+      <UserProfileEditor
+        token={token}
+        profile={userProfile}
+        isOwner={isOwnerEmail(subscriber.email)}
+      />
+
+      <section id="resume" className="mb-12 mt-12 scroll-mt-8">
         <h2 className="mb-4 font-[family-name:var(--font-display)] text-xl font-semibold text-zinc-100">
           Master resume
         </h2>
         <p className="mb-4 text-sm text-zinc-500">
-          Used as the source of truth for tailoring. Experience is reframed, never invented.
+          Source library for tailoring. If your profile is still empty, uploading a resume will fill
+          header, school, jobs, and projects for you to edit.
         </p>
         <ResumeEditor token={token} resume={resume} />
       </section>
 
-      <section>
+      <section id="digest">
         <h2 className="mb-4 font-[family-name:var(--font-display)] text-xl font-semibold text-zinc-100">
-          Digest profiles
+          Digest emails
         </h2>
+        <p className="mb-4 text-sm text-zinc-500">
+          Keyword matching for emailed job alerts. The Preferred tab uses interest areas above.
+        </p>
         <ProfileEditor token={token} profiles={profiles} />
       </section>
     </main>

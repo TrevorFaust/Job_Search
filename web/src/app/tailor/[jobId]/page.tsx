@@ -44,6 +44,7 @@ export default async function TailorPage({ params }: { params: Params }) {
   });
 
   if (prepared.kind === 'no_resume') return prepared.element;
+  if (prepared.kind === 'no_llm') return prepared.element;
   if (prepared.kind === 'not_found') notFound();
   if (prepared.kind === 'no_description') return prepared.element;
 
@@ -64,6 +65,7 @@ export default async function TailorPage({ params }: { params: Params }) {
           session={prepared.session!}
           initialReusedCount={prepared.initialReusedCount}
           backHref={backHref}
+          identity={prepared.identity}
         />
       </div>
     </main>

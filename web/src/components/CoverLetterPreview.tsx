@@ -14,6 +14,8 @@ type Props = {
   saving?: boolean;
   saved?: boolean;
   readOnly?: boolean;
+  headerLines?: [string, string, string];
+  candidateName?: string;
 };
 
 function AutoTextarea({
@@ -51,8 +53,16 @@ function AutoTextarea({
   );
 }
 
-export function CoverLetterPreview({ body, onChange, saving, saved, readOnly = false }: Props) {
-  const headerLines = coverLetterHeaderLines();
+export function CoverLetterPreview({
+  body,
+  onChange,
+  saving,
+  saved,
+  readOnly = false,
+  headerLines,
+  candidateName,
+}: Props) {
+  const lines = headerLines ?? coverLetterHeaderLines();
   const { paragraphs, spacing } = coverLetterSpacingForBody(body);
 
   function updateParagraph(index: number, text: string) {
@@ -83,7 +93,7 @@ export function CoverLetterPreview({ body, onChange, saving, saved, readOnly = f
           }}
         >
           <div className={readOnly ? 'pointer-events-none select-text' : undefined}>
-            {headerLines.map((line) => (
+            {lines.map((line) => (
               <p key={line} style={{ margin: 0, lineHeight: `${spacing.headerLineHeight}pt` }}>
                 {line}
               </p>

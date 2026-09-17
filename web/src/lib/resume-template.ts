@@ -44,16 +44,9 @@ export function sanitizeResumeContact(contact: string): string {
 
 export function defaultResumeHeader(): ResumeHeader {
   return {
-    name: LOCKED_HEADER.name,
-    location: LOCKED_HEADER.location,
-    contact: sanitizeResumeContact(
-      [
-        LOCKED_HEADER.email,
-        LOCKED_HEADER.phone,
-        LOCKED_HEADER.linkedinLabel,
-        LOCKED_HEADER.githubLabel,
-      ].join(' | ')
-    ),
+    name: '',
+    location: '',
+    contact: '',
   };
 }
 
@@ -78,7 +71,7 @@ export type ResumeEducation = {
 };
 
 export function defaultResumeEducation(): ResumeEducation {
-  return { ...LOCKED_EDUCATION };
+  return { schoolBold: '', schoolRest: '', degree: '', minors: '' };
 }
 
 export function educationLine(education: ResumeEducation) {
@@ -111,7 +104,7 @@ export const SECTION_TITLES = {
   profile: 'PROFILE',
   education: 'EDUCATION',
   experience: 'PROFESSIONAL EXPERIENCE',
-  projects: 'DATA & ANALYTICS PROJECTS',
+  projects: 'PROJECTS',
   skills: 'RELEVANT SKILLS',
 } as const;
 
@@ -126,6 +119,8 @@ export type ResumeRole = {
   bullets: ResumeBullet[];
   /** Channel Rep cannot be removed. */
   locked?: boolean;
+  /** When false, omit this role unless the model includes it for this job. */
+  includeByDefault?: boolean;
 };
 
 export type ResumeJob = {
@@ -140,6 +135,8 @@ export type ResumeProject = {
   title: string;
   subtitle?: string;
   bullets: ResumeBullet[];
+  locked?: boolean;
+  includeByDefault?: boolean;
 };
 
 export type ResumeSkillGroup = {
@@ -154,6 +151,7 @@ export type ResumeDraft = {
   experience: ResumeJob[];
   projects: ResumeProject[];
   skills: ResumeSkillGroup[];
+  projectsSectionTitle?: string;
 };
 
 export type KeywordAlignmentItem = {
@@ -182,20 +180,25 @@ export function emptyKennametalJob(): ResumeJob {
   };
 }
 
-const CANDIDATE_NAME = 'Trevor Faust';
+export function projectSectionTitle(draft?: Pick<ResumeDraft, 'projectsSectionTitle'> | null) {
+  return draft?.projectsSectionTitle?.trim() || SECTION_TITLES.projects;
+}
 
-/** Download basename: "Data Scientist - Trevor Faust" or "... - Cover letter". */
+/** Download basename: "Data Scientist - Jane Doe" or "... - Cover letter". */
 export function resumeFileName(
   jobTitle: string | null | undefined,
-  options?: { docType?: 'resume' | 'cover-letter'; format?: 'pdf' | 'docx' }
+  options?: { docType?: 'resume' | 'cover-letter'; format?: 'pdf' | 'docx'; candidateName?: string }
 ) {
+  const candidate =
+    (options?.candidateName ?? '').replace(/[<>:"/\\|?*]/g, '').replace(/\s+/g, ' ').trim() ||
+    'Applicant';
   const title =
     (jobTitle ?? 'Application').replace(/[<>:"/\\|?*]/g, '').replace(/\s+/g, ' ').trim() ||
     'Application';
   const base =
     options?.docType === 'cover-letter'
-      ? `${title} - ${CANDIDATE_NAME} - Cover letter`
-      : `${title} - ${CANDIDATE_NAME}`;
+      ? `${title} - ${candidate} - Cover letter`
+      : `${title} - ${candidate}`;
   const ext = options?.format ?? 'pdf';
   return `${base}.${ext}`;
 }

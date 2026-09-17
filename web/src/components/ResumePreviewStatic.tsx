@@ -8,6 +8,7 @@ import {
   defaultResumeEducation,
   defaultResumeHeader,
   educationLine,
+  projectSectionTitle,
   SECTION_TITLES,
   TOP_NAME_Y,
 } from '@/lib/resume-template';
@@ -133,7 +134,7 @@ function ResumePreviewStaticInner({ draft }: Props) {
           <JobBlockReadOnly key={`${job.company}-${jobIndex}`} job={job} />
         ))}
 
-        <SectionTitle>{SECTION_TITLES.projects}</SectionTitle>
+        <SectionTitle>{projectSectionTitle(draft)}</SectionTitle>
         {draft.projects.map((project, projectIndex) => (
           <ProjectBlockReadOnly key={projectIndex} project={project} />
         ))}

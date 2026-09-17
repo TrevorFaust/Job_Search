@@ -15,6 +15,7 @@ import {
   RESUME_RULE,
   RULE_LEFT,
   RULE_RIGHT,
+  projectSectionTitle,
   SECTION_TITLES,
   SKILLS_MAX_LINES,
   TOP_NAME_Y,
@@ -27,6 +28,7 @@ import {
   coverLetterDate,
   coverLetterHeaderLines,
   parseCoverLetterParagraphs,
+  type CoverIdentity,
 } from './cover-letter';
 import { parseResumeOutput } from './resume-draft';
 import type { ResumeFormatMeta } from './resume-structure';
@@ -268,7 +270,7 @@ function layoutResume(doc: PDFKit.PDFDocument, draft: ResumeDraft): ResumeLayout
     }
   }
 
-  y = drawSectionHeader(doc, SECTION_TITLES.projects, y, fonts);
+  y = drawSectionHeader(doc, projectSectionTitle(draft), y, fonts);
   for (const project of draft.projects) {
     y = drawRoleTitle(doc, project.title, y, fonts);
     if (project.subtitle) {
@@ -370,7 +372,7 @@ export function draftToPdfBuffer(draft: ResumeDraft): Promise<Buffer> {
   });
 }
 
-function layoutCoverLetter(doc: PDFKit.PDFDocument, raw: string) {
+function layoutCoverLetter(doc: PDFKit.PDFDocument, raw: string, identity?: CoverIdentity | null) {
   const fonts = registerFonts(doc);
   const margin = COVER_LETTER_MARGIN_PT;
   const width = PAGE_WIDTH - margin * 2;
@@ -388,7 +390,8 @@ function layoutCoverLetter(doc: PDFKit.PDFDocument, raw: string) {
   const spacing = computeCoverLetterSpacing(bodyLines, paragraphs);
 
   let y = margin;
-  for (const line of coverLetterHeaderLines()) {
+  for (const line of coverLetterHeaderLines(identity)) {
+    if (!line.trim()) continue;
     doc.text(line, margin, y, { width, lineBreak: false });
     y += spacing.headerLineHeight;
   }
@@ -418,14 +421,14 @@ function layoutCoverLetter(doc: PDFKit.PDFDocument, raw: string) {
   }
 }
 
-export function coverLetterToPdfBuffer(raw: string): Promise<Buffer> {
+export function coverLetterToPdfBuffer(raw: string, identity?: CoverIdentity | null): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = makeDoc();
     const chunks: Buffer[] = [];
     doc.on('data', (chunk: Buffer) => chunks.push(chunk));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
-    layoutCoverLetter(doc, raw);
+    layoutCoverLetter(doc, raw, identity);
     doc.end();
   });
 }

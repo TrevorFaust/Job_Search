@@ -10,6 +10,7 @@ import {
 import { parseJobFilters, type JobFilters } from './filters';
 import { ALL_CATEGORY_IDS } from './categories';
 import type { Subscriber } from './queries';
+import { getOrCreateUserProfile } from './user-profile';
 
 export type BoardView = 'all' | 'preferred' | 'priority' | 'applied';
 
@@ -27,6 +28,8 @@ export type BoardPayload = {
   priorityJobIds: number[];
   organizations: string[];
   locations: string[];
+  preferredCategories: string[];
+  settingsToken?: string;
 };
 
 export function normalizeBoardView(value: string | undefined): BoardView {
@@ -56,13 +59,36 @@ export async function fetchBoardPayload(
   const q = typeof params.q === 'string' ? params.q : '';
   const page = typeof params.page === 'string' ? Math.max(1, Number(params.page) || 1) : 1;
   const filters = parseJobFilters(params);
+  const profile = signedIn ? await getOrCreateUserProfile(subscriber!.id) : null;
+  const preferredCategories = profile?.preferred_categories ?? [];
 
   if (view === 'preferred' && !filters.categories.length) {
-    filters.categories = ALL_CATEGORY_IDS;
+    filters.categories = preferredCategories.length ? preferredCategories : signedIn ? [] : ALL_CATEGORY_IDS;
   }
 
   if (view === 'applied' && !signedIn) {
     throw new Error('Sign in required for applied jobs');
+  }
+
+  if (view === 'preferred' && signedIn && !filters.categories.length) {
+    const [priorityJobIds] = await Promise.all([getPriorityJobIds(undefined)]);
+    return {
+      jobs: [],
+      total: 0,
+      page: 1,
+      totalPages: 1,
+      view,
+      stage,
+      sort,
+      q,
+      filters,
+      signedIn,
+      priorityJobIds,
+      organizations: [],
+      locations: [],
+      preferredCategories,
+      settingsToken: subscriber?.edit_token,
+    };
   }
 
   const boardExclusions = signedIn
@@ -104,6 +130,8 @@ export async function fetchBoardPayload(
     priorityJobIds,
     organizations: result.organizations ?? [],
     locations: result.locations ?? [],
+    preferredCategories,
+    settingsToken: subscriber?.edit_token,
   };
 }
 

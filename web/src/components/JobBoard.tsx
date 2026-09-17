@@ -51,6 +51,8 @@ type Props = {
   priorityJobIds?: number[];
   organizations?: string[];
   locations?: string[];
+  preferredCategories?: string[];
+  settingsToken?: string;
 };
 
 const BOARD_VIEWS: { id: BoardView; label: string; signedInOnly?: boolean }[] = [
@@ -127,6 +129,8 @@ export function JobBoard({
   priorityJobIds = [],
   organizations = [],
   locations = [],
+  preferredCategories = [],
+  settingsToken,
 }: Props) {
   const pagePriorityIds = jobs.filter((j) => j.is_special && !j.isManual).map((j) => j.id);
   const { ready: seenReady, newCount, sessionUnseen } = usePrioritySeen(
@@ -179,7 +183,7 @@ export function JobBoard({
         <PersistBoardFilters />
       </Suspense>
       <div className="grid gap-8 lg:grid-cols-[240px_minmax(0,1fr)]">
-      <FilterSidebar filters={filters} view={view} stage={stage} sort={sort} q={q} />
+      <FilterSidebar filters={filters} view={view} stage={stage} sort={sort} q={q} preferredCategories={preferredCategories} />
 
       <div className="space-y-6">
         <form action="/" method="get" className="flex gap-2">
@@ -373,8 +377,18 @@ export function JobBoard({
 
         {view === 'preferred' && (
           <p className="text-sm text-zinc-500">
-            Jobs matching your interest areas (sports, economics, energy, analytics, and related fields). Narrow
-            categories in the sidebar, or combine with location and salary filters.
+            Jobs matching the interest areas saved in your profile
+            {settingsToken ? (
+              <>
+                {' '}
+                (
+                <a href={`/settings/${settingsToken}#preferred`} className="text-amber-400 hover:underline">
+                  edit
+                </a>
+                )
+              </>
+            ) : null}
+            . Narrow further in the sidebar, or combine with location and salary filters.
           </p>
         )}
 
@@ -422,7 +436,9 @@ export function JobBoard({
                   ? `No jobs in "${STAGE_LABELS[stage]}" yet.`
                   : 'No applied jobs yet. Mark a job after you submit an application.'
                 : view === 'preferred'
-                  ? 'No jobs match your selected interest areas. Try enabling more categories or loosening other filters.'
+                  ? signedIn && !preferredCategories.length
+                    ? 'Pick interest areas in Profile to fill this tab.'
+                    : 'No jobs match your selected interest areas. Try enabling more categories or loosening other filters.'
                   : view === 'priority'
                     ? filters.priorityOrg || filters.priorityPlace || q
                       ? 'No priority jobs match these filters. Clear organization, location, or search and try again.'

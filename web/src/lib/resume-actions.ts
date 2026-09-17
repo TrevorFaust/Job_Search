@@ -43,6 +43,13 @@ import {
   type AtsRebuttal,
 } from './ats-audit';
 import { normalizeCoverLetterBody } from './cover-letter';
+import { withUserAi } from './user-ai';
+import {
+  ingestLearnedFacts,
+  maybeSeedProfileFromResume,
+  getOrCreateUserProfile,
+  toCandidateIdentity,
+} from './user-profile';
 import { applyLockedStructure, parseResumeOutput, plainTextToResumeDraft, serializeResumeOutput } from './resume-draft';
 import { fitResumeToPage } from './resume-fit';
 import { capSkillGroupsToLines } from './resume-pdf';
@@ -65,6 +72,8 @@ export async function saveResumeText(token: string, formData: FormData) {
   if (contentText.length < 100) throw new Error('Paste at least a few lines of resume text');
 
   await upsertResume(sub.id, contentText, null, 'Master resume', extractResumeStructure(contentText));
+  const parsed = plainTextToResumeDraft(contentText);
+  if (parsed) await maybeSeedProfileFromResume(sub.id, parsed);
   revalidatePath(`/settings/${token}`);
   revalidatePath('/resume');
 }
@@ -78,6 +87,8 @@ export async function saveResumeFile(token: string, formData: FormData) {
   if (text.length < 100) throw new Error('Could not extract enough text from that file');
 
   await upsertResume(sub.id, text, filename, 'Master resume', formatMeta);
+  const parsed = plainTextToResumeDraft(text);
+  if (parsed) await maybeSeedProfileFromResume(sub.id, parsed);
   revalidatePath(`/settings/${token}`);
   revalidatePath('/resume');
 }
@@ -140,7 +151,8 @@ export async function runGapAnalysis(sessionId: string) {
       related_requirement: b.related_requirement,
     }));
 
-    const { gap_analysis, questions: rawQuestions } = await analyzeResumeForJob(
+    const { gap_analysis, questions: rawQuestions } = await withUserAi(sub, () =>
+      analyzeResumeForJob(
       resume.content_text,
       {
         title: job.title,
@@ -148,6 +160,7 @@ export async function runGapAnalysis(sessionId: string) {
         description: job.description,
       },
       priorAnswers
+      )
     );
 
     const merged = mergeQuestionsWithBank(rawQuestions, bank);
@@ -207,6 +220,7 @@ export async function saveTailorAnswers(
       related_requirement: a.related_requirement ?? '',
     }))
   );
+  await ingestLearnedFacts(sub.id, visibleAnswers);
 
   await updateSession(sessionId, sub.id, {
     answers: mergedAnswers,
@@ -256,7 +270,8 @@ export async function generateTailoredDraft(
         ? resume.format_meta
         : extractResumeStructure(resume.content_text);
 
-    const [output_text, cover_letter_text] = await Promise.all([
+    const [output_text, cover_letter_text] = await withUserAi(sub, () =>
+      Promise.all([
       generateTailoredResume(
         resume.content_text,
         { title: job.title, company: job.company, description: job.description },
@@ -275,16 +290,19 @@ export async function generateTailoredDraft(
         fullAnswers,
         { extraContext: context }
       ),
-    ]);
+      ])
+    );
 
-    const { output_text: auditedOutput, ats_audit } = await runAtsAuditAndPatch({
+    const { output_text: auditedOutput, ats_audit } = await withUserAi(sub, () =>
+      runAtsAuditAndPatch({
       outputText: output_text,
       resumeText: resume.content_text,
       job: { title: job.title, company: job.company, description: job.description },
       fullAnswers,
       subscriberId: sub.id,
       priorAudit: isAtsAudit(session.ats_audit) ? session.ats_audit : null,
-    });
+      })
+    );
 
     await updateSession(sessionId, sub.id, {
       status: 'done',
@@ -471,13 +489,15 @@ export async function applyAtsImprovements(
   await updateSession(sessionId, sub.id, { status: 'generating', error_message: null });
 
   try {
-    const { output_text: patchedRaw, audit } = await applyAtsFeedbackToResume(
+    const { output_text: patchedRaw, audit } = await withUserAi(sub, () =>
+      applyAtsFeedbackToResume(
       previousDraft,
       resume.content_text,
       { title: job.title, company: job.company, description: job.description },
       visibleAnswers,
       visibleRebuttals,
       existingAudit
+      )
     );
 
     const patchedDraft = parseResumeOutput(patchedRaw)?.draft ?? previousDraft;
@@ -562,19 +582,21 @@ export async function refreshAtsAudit(sessionId: string, currentResumeDraft?: Re
     currentResumeDraft != null
       ? serializeResumeOutput({
           version: 1,
-          draft: applyLockedStructure(currentResumeDraft),
+          draft: applyLockedStructure(currentResumeDraft, toCandidateIdentity(await getOrCreateUserProfile(sub.id))),
           keywordAlignment: parseResumeOutput(session.output_text)?.keywordAlignment ?? [],
         })
       : session.output_text;
 
-  const { output_text, ats_audit } = await runAtsAuditAndPatch({
+  const { output_text, ats_audit } = await withUserAi(sub, () =>
+    runAtsAuditAndPatch({
     outputText: baseOutput,
     resumeText: resume.content_text,
     job: { title: job.title, company: job.company, description: job.description },
     fullAnswers,
     subscriberId: sub.id,
     priorAudit: isAtsAudit(session.ats_audit) ? session.ats_audit : null,
-  });
+    })
+  );
 
   await updateSession(sessionId, sub.id, { status: 'done', output_text, ats_audit });
   return { output_text, ats_audit };
@@ -602,12 +624,14 @@ export async function generateCoverLetterDraft(sessionId: string, extraContext =
       : { strong_matches: [], partial_matches: [], gaps: [], summary: '' };
   const fullAnswers = buildFullAnswerSet(session.questions, session.answers, bank);
 
-  const cover_letter_text = await generateCoverLetter(
+  const cover_letter_text = await withUserAi(sub, () =>
+    generateCoverLetter(
     resume.content_text,
     { title: job.title, company: job.company, description: job.description },
     gapAnalysis,
     fullAnswers,
     { extraContext: context }
+    )
   );
 
   await updateSession(sessionId, sub.id, { cover_letter_text });
@@ -640,7 +664,9 @@ export async function saveResumeDraft(sessionId: string, draft: ResumeDraft) {
   if (!session) throw new Error('Session not found');
 
   const existing = parseResumeOutput(session.output_text);
-  const locked = capSkillGroupsToLines(applyLockedStructure(draft));
+  const locked = capSkillGroupsToLines(
+    applyLockedStructure(draft, toCandidateIdentity(await getOrCreateUserProfile(sub.id)))
+  );
   await updateSession(sessionId, sub.id, {
     output_text: serializeResumeOutput({
       version: 1,
@@ -658,7 +684,9 @@ export async function fitResumeDraft(sessionId: string, draft: ResumeDraft) {
   if (!session) throw new Error('Session not found');
 
   const existing = parseResumeOutput(session.output_text);
-  const fitted = fitResumeToPage(applyLockedStructure(draft));
+  const fitted = fitResumeToPage(
+    applyLockedStructure(draft, toCandidateIdentity(await getOrCreateUserProfile(sub.id)))
+  );
   await updateSession(sessionId, sub.id, {
     output_text: serializeResumeOutput({
       version: 1,
@@ -729,7 +757,8 @@ export async function reviseTailoredDraft(
           ? resume.format_meta
           : extractResumeStructure(resume.content_text);
 
-      const output_text = await generateTailoredResume(
+      const output_text = await withUserAi(sub, () =>
+        generateTailoredResume(
         resume.content_text,
         { title: job.title, company: job.company, description: job.description },
         gapAnalysis,
@@ -741,16 +770,19 @@ export async function reviseTailoredDraft(
           previousDraft,
           revisionNotes: notes,
         }
+        )
       );
 
-      const { output_text: auditedOutput, ats_audit } = await runAtsAuditAndPatch({
+      const { output_text: auditedOutput, ats_audit } = await withUserAi(sub, () =>
+        runAtsAuditAndPatch({
         outputText: output_text,
         resumeText: resume.content_text,
         job: { title: job.title, company: job.company, description: job.description },
         fullAnswers,
         subscriberId: sub.id,
         priorAudit: isAtsAudit(session.ats_audit) ? session.ats_audit : null,
-      });
+        })
+      );
 
       await updateSession(sessionId, sub.id, {
         status: 'done',
@@ -769,7 +801,8 @@ export async function reviseTailoredDraft(
     );
     if (!previousBody.trim()) throw new Error('No cover letter draft to revise');
 
-    const cover_letter_text = await generateCoverLetter(
+    const cover_letter_text = await withUserAi(sub, () =>
+      generateCoverLetter(
       resume.content_text,
       { title: job.title, company: job.company, description: job.description },
       gapAnalysis,
@@ -779,6 +812,7 @@ export async function reviseTailoredDraft(
         previousBody,
         revisionNotes: notes,
       }
+      )
     );
 
     await updateSession(sessionId, sub.id, { status: 'done', cover_letter_text });

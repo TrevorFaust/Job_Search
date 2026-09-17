@@ -1,5 +1,6 @@
-import { LOCKED_HEADER, PAGE_HEIGHT, PAGE_WIDTH, defaultResumeHeader } from './resume-template';
+import { PAGE_HEIGHT, PAGE_WIDTH } from './resume-template';
 import { stripEmDashes } from './resume-structure';
+import type { CandidateIdentity } from './user-profile';
 
 const MONTHS =
   'January|February|March|April|May|June|July|August|September|October|November|December';
@@ -9,18 +10,11 @@ const SHORT_DATE = /^\d{1,2}\/\d{1,2}\/(?:\d{2}|\d{4})\.?$/;
 /** US Letter inch margins for a standard business letter. */
 export const COVER_LETTER_MARGIN_PT = 72;
 
-export const COVER_LETTER_HEADER = {
-  name: 'Trevor Faust',
-  locationContact: `Seattle, WA | ${LOCKED_HEADER.email} | ${LOCKED_HEADER.phone}`,
-  profiles: 'linkedin.com/in/trevor-faust-000t | github.com/TrevorFaust',
-} as const;
+export type CoverIdentity = CandidateIdentity['cover'];
 
-export function coverLetterHeaderLines(): [string, string, string] {
-  return [
-    COVER_LETTER_HEADER.name,
-    COVER_LETTER_HEADER.locationContact,
-    COVER_LETTER_HEADER.profiles,
-  ];
+export function coverLetterHeaderLines(identity?: CoverIdentity | null): [string, string, string] {
+  const cover = identity ?? { name: '', locationContact: '', profiles: '' };
+  return [cover.name, cover.locationContact, cover.profiles];
 }
 
 /** Pacific date so the letter year matches Trevor's local calendar, not the model. */
@@ -33,12 +27,13 @@ export function coverLetterDate(now = new Date()): string {
   });
 }
 
-function isLockedHeaderLine(line: string): boolean {
+function isLockedHeaderLine(line: string, identity?: CoverIdentity | null): boolean {
   const t = line.trim();
   if (!t) return false;
-  const resume = defaultResumeHeader();
-  if (t === resume.name || t === resume.location || t === resume.contact) return true;
-  if (coverLetterHeaderLines().some((line) => line === t)) return true;
+  const header = coverLetterHeaderLines(identity);
+  if (header.some((line) => line && line === t)) return true;
+  const name = identity?.name;
+  if (name && t.toLowerCase() === name.toLowerCase()) return true;
   if (/^trevor\s+faust\.?$/i.test(t)) return true;
   if (/seattle,\s*wa/i.test(t) && (/relocate/i.test(t) || /trevorfaus27@gmail/i.test(t))) return true;
   if (/trevorfaus27@gmail\.com/i.test(t)) return true;
@@ -56,7 +51,7 @@ function isDateLine(line: string): boolean {
 }
 
 /** Strip letterhead and date lines so stored text is only the per-job body. */
-export function normalizeCoverLetterBody(raw: string): string {
+export function normalizeCoverLetterBody(raw: string, candidateName?: string): string {
   if (!raw) return '';
   const lines = raw
     .replace(/\r\n/g, '\n')
@@ -72,29 +67,41 @@ export function normalizeCoverLetterBody(raw: string): string {
     break;
   }
   while (i < lines.length && !lines[i].trim()) i += 1;
-  return structureCoverLetterBody(lines.slice(i).join('\n').replace(/\s+$/, ''));
+  return structureCoverLetterBody(lines.slice(i).join('\n').replace(/\s+$/, ''), candidateName);
 }
 
-export function composeCoverLetter(body: string, now?: Date): string {
-  const letter = normalizeCoverLetterBody(body);
-  return [...coverLetterHeaderLines(), '', coverLetterDate(now), '', letter].join('\n').trim();
+export function composeCoverLetter(
+  body: string,
+  now?: Date,
+  identity?: CoverIdentity | null
+): string {
+  const letter = normalizeCoverLetterBody(body, identity?.name);
+  return [...coverLetterHeaderLines(identity), '', coverLetterDate(now), '', letter].join('\n').trim();
 }
 
-const CLOSING_TAIL = /\s*(sincerely,?)\s*(trevor\s+faust\.?)?\s*$/i;
+const CLOSING_TAIL = /\s*(sincerely,?)\s*([A-Z][^\n]{0,80})?\s*$/i;
+
+function closingName(name?: string) {
+  return name?.trim() || 'Applicant';
+}
+
+function closingBlock(name?: string) {
+  return `\n\nSincerely,\n${closingName(name)}`;
+}
 
 /** Keep salutation, body, then closing with the name on the next line. */
-export function structureCoverLetterBody(body: string): string {
+export function structureCoverLetterBody(body: string, candidateName?: string): string {
   let text = body.replace(/\r\n/g, '\n').trim();
   if (!text) return '';
 
-  const closing = '\n\nSincerely,\nTrevor Faust';
+  const closing = closingBlock(candidateName);
   if (CLOSING_TAIL.test(text)) {
     text = text.replace(CLOSING_TAIL, '').trimEnd();
     text = `${text}${closing}`;
   } else if (!/\bsincerely\b/i.test(text)) {
     text = `${text}${closing}`;
   } else {
-    text = text.replace(/\n*(sincerely,?)\n*(trevor\s+faust\.?)?\s*$/i, closing);
+    text = text.replace(/\n*(sincerely,?)\n*([A-Z][^\n]{0,80})?\s*$/i, closing);
   }
 
   text = text.replace(/(^|\n)(dear[^\n,]+,)[ \t]*/gi, '$1$2\n\n');

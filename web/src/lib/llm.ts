@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk';
 import {
   applyLockedStructure,
   countResumeBullets,
@@ -15,6 +14,9 @@ import {
 import { coverLetterDate, normalizeCoverLetterBody } from './cover-letter';
 import { FILL_IF_SLACK_PT, type ResumeDraft, type ResumeSessionOutput } from './resume-template';
 import { CANDIDATE_FACTS } from './candidate-facts';
+import { currentIdentity } from './identity-context';
+import { requireLlmRuntime } from './identity-context';
+import { completeLlmText } from './llm-runtime';
 import { normalizeFitScore } from './fit-level';
 import type { FitLevel } from './fit-level';
 import type { AtsAudit, AtsFinding, AtsSoftBlocker } from './ats-audit';
@@ -113,18 +115,33 @@ export type InterviewQuestionAnswerResult = {
   watch_outs?: string;
 };
 
-function getClient() {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) throw new Error('ANTHROPIC_API_KEY is not configured');
-  return new Anthropic({ apiKey: key });
+function getClientRuntime() {
+  return requireLlmRuntime();
 }
 
-function getModel() {
-  return process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6';
+function knownFacts() {
+  const identity = currentIdentity();
+  return identity?.facts.length ? identity.facts : CANDIDATE_FACTS;
 }
 
-function getInterviewModel() {
-  return process.env.ANTHROPIC_INTERVIEW_MODEL ?? 'claude-haiku-4-5-20251001';
+function projectGrounding() {
+  const identity = currentIdentity();
+  const notes = identity?.contextNotes.trim() || '';
+  return {
+    profile_notes: notes ? notes.slice(0, 20000) : null,
+    known_project_details: knownFacts()
+      .slice(0, 50)
+      .map((f) => ({ topic: f.id, answer: f.answer })),
+  };
+}
+
+async function claudeText(
+  system: string,
+  user: string,
+  maxTokens = 8192,
+  model?: string
+): Promise<string> {
+  return completeLlmText(getClientRuntime(), system, user, maxTokens, model);
 }
 
 function compactGapAnalysis(gap: GapAnalysis) {
@@ -158,26 +175,6 @@ function guessCandidateName(resumeText: string): string | null {
 
 function directVoice(text: string, resumeText: string) {
   return addressCandidateDirectly(text, guessCandidateName(resumeText));
-}
-
-async function claudeText(
-  system: string,
-  user: string,
-  maxTokens = 8192,
-  model?: string
-): Promise<string> {
-  const client = getClient();
-  const response = await client.messages.create({
-    model: model ?? getModel(),
-    max_tokens: maxTokens,
-    system,
-    messages: [{ role: 'user', content: user }],
-    temperature: 0.4,
-  });
-
-  const block = response.content.find((b) => b.type === 'text');
-  if (!block || block.type !== 'text') throw new Error('Empty response from AI');
-  return block.text.trim();
 }
 
 const VOICE_RULES = `
@@ -220,43 +217,108 @@ const PUNCTUATION_RULE = `PUNCTUATION (hard, non-negotiable):
 - Use a comma, a period, a colon, or the word "to" instead.
 - ASCII hyphen is allowed only in dates and compound words (Feb 2021-Present, Power BI, well-known).`;
 
-const GENERATE_SYSTEM = `You are an expert resume writer filling Trevor Faust's locked one-page template. Output JSON only.
+function identityJobOutline() {
+  const identity = currentIdentity();
+  if (!identity?.experience.length) {
+    return `- Use only employers, titles, and dates from the master resume. Do not invent jobs.
+- Keep the candidate's real company/title strings.`;
+  }
+  const jobs = identity.experience
+    .map((job, index) => {
+      const roles = job.roles
+        .map((r) => `${r.title}${r.locked ? ' (always include)' : r.includeByDefault === false ? ' (optional)' : ''}`)
+        .join('; ');
+      return `- Job ${index + 1}: ${job.company}${job.locationDates} — roles: ${roles}`;
+    })
+    .join('\n');
+  const projects = identity.projects.length
+    ? identity.projects
+        .map(
+          (p) =>
+            `- ${p.title}${p.locked ? ' (always include)' : p.includeByDefault === false ? ' (include when relevant)' : ''}`
+        )
+        .join('\n')
+    : '- Projects: only those listed on the master resume.';
+  const extra = [];
+  const blob = JSON.stringify(identity).toLowerCase();
+  if (blob.includes('draftdna')) {
+    extra.push(
+      '- If DraftDNA/NFL platform is in the project list, title it "NFL Data Platform (draftdna.com)". Do not put "Mock Draft Simulator" in the title. It is a Vite SPA (not Next.js). Do not invent 200M records, 400+ badges, user counts, or a funded prize pool. Named archetypes = 100; chaos badges ≈ 28. Community ranks are baseline×100 + signed-in boards×1. Pick Six prize figures are rules constants, not cash on hand.'
+    );
+  }
+  if (blob.includes('scoutdna')) {
+    extra.push(
+      '- If ScoutDNA is in the project list, title it "ScoutDNA: All 32" with no production URL. Do not invent a Vercel domain, subscriber counts, or live email. Collect is daily; full 32-team Claude compose is Tuesday weekly-first, not every morning. Camp proposals never auto-write battles. Admin routes are unauthenticated. This is not a second DraftDNA product: it shares the paveh Postgres and writes newsletter_* so it does not collide with public.teams. For ingest, applied LLM, or sports-data JDs, prefer ScoutDNA as the second project over Apartment Hunt.'
+    );
+  }
+  if (blob.includes('apartment hunt')) {
+    extra.push(
+      '- If Apartment Hunt is in the project list, title it "Apartment Hunt" with no public URL. Do not invent a Vercel domain. Do not claim Chicago adapters, geocoding, or radius unless the posting needs scraping/geo, and even then do not imply a production web host or that those pieces are on origin/master.'
+    );
+  }
+  if (
+    blob.includes('practice squad') ||
+    blob.includes('fantasy-league-blog') ||
+    blob.includes('fantasy league blog') ||
+    blob.includes('fantasy blog')
+  ) {
+    extra.push(
+      '- If the fantasy league blog is in the project list, title it "Practice Squad Rankings (fantasy-league-blog.vercel.app)". Next.js 16 App Router on Vercel, JSON in git, images on Wix CDN, no database and no sports APIs. 23 posts across 2023–2025. Rankings are commissioner prose parsed by regex, not a scoring engine. Do not invent MAUs, a custom domain, Sleeper/ESPN APIs, or product revenue ($225 is league prize copy). Live Vercel is the Sep 10 card layout; magazine UI, ranking parser, and crop editor are local working-tree unless a later deploy happened outside git. Crop POST is unauthenticated file I/O and not durable on serverless. For Next.js App Router, static generation, or CMS-migration JDs, prefer this as a supporting project over the portfolio brochure.'
+    );
+  }
+  if (blob.includes('trevorfaust.github.io') || blob.includes('trevor faust portfolio')) {
+    extra.push(
+      '- If the portfolio site is in the project list, title it "Trevor Faust Portfolio (trevorfaust.github.io)". It is a static Astro 7 GitHub Pages brochure. Do not attribute DraftDNA/ScoutDNA pipelines, 200M records, RAG, Playwright, Next.js, or Supabase to this project. Those are other repos. Do not invent pageviews, Lighthouse scores, or a production Node server.'
+    );
+  }
+  return `- Header and education are locked from the candidate profile. Do not emit them in JSON.
+- Use this experience skeleton (bullets vary; companies/titles/dates do not):
+${jobs}
+- Projects section title: ${identity.projectsSectionTitle}
+${projects}
+${extra.join('\n')}`;
+}
 
-- Header and education start from the template. Do not emit them in JSON. The user may edit those lines later.
-- First job is always Kennametal, Seattle, WA / Pittsburgh, PA / Solon, OH (Feb 2021-Present)
-- First role under Kennametal is always "Regional Channel Representative" (bullets vary)
-- Section order: Profile → Education → Professional Experience → Data & Analytics Projects → Relevant Skills
+function generateSystemPrompt() {
+  const identity = currentIdentity();
+  const name = identity?.displayName || 'the candidate';
+  return `You are an expert resume writer filling ${name}'s locked one-page template. Output JSON only.
+
+${identityJobOutline()}
+- Section order: Profile → Education → Professional Experience → ${identity?.projectsSectionTitle || 'PROJECTS'} → Relevant Skills
 - Skills: exactly TWO groups, items joined later with " | ", both groups centered
 
 ${PUNCTUATION_RULE}
 
-Trevor's own one-pagers are DENSE. They fill the sheet to about 0.4" from the bottom. A short resume is a failed draft. 45 lines is fine if they fill the page. Empty space under skills is a failure.
+The one-pager must be DENSE. Fill the sheet to about 0.4" from the bottom. A short resume is a failed draft. 45 lines is fine if they fill the page. Empty space under skills is a failure.
 
-Default packed page (use this unless the job is purely product/design and projects need the room):
+Default packed page:
 - profile: 2-3 sentences wrapping to 4-5 lines. Not 5+ sentences. Implied first person (no "I"). Last sentence can hook the employer.
-- Channel Rep: 5-6 bullets. Most bullets wrap to 2 lines. Mark the weakest (often customer retention) cutFirst: true.
-- Process Engineer: INCLUDE by default with 3 bullets ($2M / 700 hours, Excel/VBA scheduling, proposal/stakeholder). Omit only for product/design/frontend-heavy roles where projects should go deeper instead.
-- Extra employers: ONLY if clearly relevant (Penn State energy research for energy roles).
-- projects: 1-2 projects typical; the primary one (DraftDNA / NFL platform) gets 4-5 bullets. A second project (newsletter, job-board tooling) gets 2-3 when it maps to the JD.
+- Primary current role: 5-6 bullets. Most bullets wrap to 2 lines. Mark the weakest cutFirst: true.
+- Additional roles/jobs from the skeleton: include by default unless the posting is a poor match and the role is marked optional.
+- Extra employers: ONLY if they already exist on the master resume or profile and clearly help this job.
+- projects: 1-2 typical; the primary project gets 4-5 bullets. A second project gets 2-3 when it maps to the JD.
 - Prefer extra bullets that prove depth for THIS job: methods, stakeholders, scale, tools used in context. Do not invent metrics.
-- Project titles are italic AND underlined. Put the URL on the SAME line as the title, e.g. "NFL Data Platform (draftdna.com)". Title it as the NFL data platform only — do NOT put "Mock Draft Simulator" in the project title (mock draft can be one bullet if relevant). Newsletter / job-board tooling stays a separate second project when it maps to the JD. Do NOT emit a subtitle field. Do NOT put stack on its own line (no "draftdna.com, Python, PostgreSQL, ..."). If the JD cares about the stack, one bullet may name Python, PostgreSQL, Supabase, React, TypeScript, Tailwind.
-- skills: exactly TWO groups. Keep a solid tool list, but each group's items (joined with " | ") must wrap to AT MOST 2 lines. Headings do not count. About 6-9 concise tools per group is typical; never a keyword dump.
-- Do NOT stuff job-description keywords into Relevant Skills. Mirror JD language in profile, experience bullets, and project bullets where it is true. Skills are an inventory of tools Trevor actually uses, ordered with the most relevant first.
-- If the page has room, expand Channel Rep, Process Engineer, or projects. Never grow skills past 2 lines to fill space.
+- Project titles are italic AND underlined. Put any URL on the SAME line as the title. Do NOT emit a subtitle field. Do NOT put stack on its own line. If the JD cares about the stack, one bullet may name those tools.
+- skills: exactly TWO groups. Each group's items (joined with " | ") must wrap to AT MOST 2 lines. About 6-9 concise tools per group is typical; never a keyword dump.
+- Do NOT stuff job-description keywords into Relevant Skills. Mirror JD language in profile, experience bullets, and project bullets where it is true. Skills are an inventory of tools the candidate actually uses, ordered with the most relevant first.
+- If the page has room, expand the primary role or projects. Never grow skills past 2 lines to fill space.
 - Each bullet: NO leading dash. Lead with the quantified result when one exists, then the action. Vary verbs. Never invent employers, titles, dates, degrees, or metrics.
 
-Do NOT write a sparse resume. Empty space under skills means you omitted Process Engineer, a project, or bullets you should have kept. Put cutFirst on extras rather than leaving them out.
+Do NOT write a sparse resume. Empty space under skills means you omitted a real role, project, or bullets you should have kept. Put cutFirst on extras rather than leaving them out.
 
-Voice: Power BI, team of 7, 20% retention, $2M / 700 labor hours, 200M+ records, 400+ draft badges, 32 NFL teams. No "results-oriented" fluff.
+Voice: use only metrics from the master resume, profile notes, and Q&A. No "results-oriented" fluff.
 
 Respond with a single JSON object only. No markdown fences, no resume header/education text.`;
+}
 
-const REVISE_GENERATE_SYSTEM = `You revise an existing tailored resume JSON based on the candidate's feedback. Output JSON only.
+function reviseSystemPrompt() {
+  return `You revise an existing tailored resume JSON based on the candidate's feedback. Output JSON only.
 
 - Start from current_draft. Apply ONLY the requested changes — do not rewrite from scratch unless they asked.
 - Keep bullets, sections, and wording that still work. Preserve the same one-page density unless they ask to shorten.
 - Header and education are locked. Do not emit them in JSON.
-- Same Kennametal structure, section order, and skills rules as the original tailored resume.
+${identityJobOutline()}
 - Keep profile short: 2-3 sentences, at most 4-5 wrapped lines. Prefer experience/project bullets for new evidence — never balloon the profile.
 - NEVER invent employers, titles, dates, degrees, metrics, or skills.
 - If a requested change would require invented experience, keep the original wording for that part.
@@ -264,23 +326,103 @@ const REVISE_GENERATE_SYSTEM = `You revise an existing tailored resume JSON base
 ${PUNCTUATION_RULE}
 
 Respond with a single JSON object only. No markdown fences, no resume header/education text.`;
+}
 
-const FILL_SYSTEM = `You densify an existing tailored resume JSON so it fills one US Letter page. Output JSON only.
+function fillSystemPrompt() {
+  const identity = currentIdentity();
+  const primary =
+    identity?.experience[0]?.roles[0]?.title ||
+    identity?.experience[0]?.company ||
+    'the primary role';
+  return `You densify an existing tailored resume JSON so it fills one US Letter page. Output JSON only.
 
 ${PUNCTUATION_RULE}
 
 - Keep the same header and education text. Do not rewrite name, contact, or school lines.
 - Keep profile at 2-3 sentences wrapping to about 4-5 lines. Do not add a fourth sentence.
 - NEVER expand the profile past 4-5 lines. Prefer putting new evidence in experience/project bullets, not the profile.
-- No project subtitle. DraftDNA title is "NFL Data Platform (draftdna.com)" on the same line — never "Mock Draft Simulator" in the title.
+- No project subtitle.
 - Tech stack is not its own line. Include it as a bullet only if the job posting cares about those tools.
 - Do NOT add skills items to fill the page. Each skills group must stay at most 2 wrapped lines. Leave skills as they are unless they already overflow, in which case cut trailing tools.
 - ADD 1-2 NEW bullets. Keep existing bullets. Each new bullet should wrap to about 2 lines.
-- New bullets must increase credibility for THIS job: a method, tool-in-context, stakeholder, scale, or quantified outcome from the master resume that maps to the posting. Prefer Channel Rep, Process Engineer, or the primary project. Never invent employers, titles, dates, or metrics.
+- New bullets must increase credibility for THIS job: a method, tool-in-context, stakeholder, scale, or quantified outcome from the master resume that maps to the posting. Prefer ${primary} or the primary project. Never invent employers, titles, dates, or metrics.
 - Mark newly added bullets cutFirst: true.
 - Return the full draft JSON: profile, experience, projects, skills. Do not return keywordAlignment.
 
 The page currently has leftover space. Add the requested number of new bullets.`;
+}
+
+function coverLetterSystemPrompt(revising: boolean) {
+  const name = currentIdentity()?.displayName || 'the candidate';
+  if (revising) {
+    return `You revise an existing cover letter based on the candidate's feedback.
+
+The candidate already has a draft they mostly like. Apply their revision notes while keeping factual accuracy and first-person voice.
+
+Rules:
+- Start from current_draft. Apply ONLY the requested tweaks — do not rewrite from scratch unless they asked.
+- Same formatting rules as the original cover letter (no letterhead, no date line, salutation + body + Sincerely/${name}).
+- NEVER invent employers, projects, degrees, or skills.
+- NEVER use em dashes, en dashes, or " -- " as a dash.
+- Output the complete revised letter text only.`;
+  }
+  return `You are an expert career coach and cover letter writer with 15+ years of experience helping candidates land competitive roles.
+
+Write a concise, professional cover letter tailored to THIS specific job and company.
+
+Tone (critical):
+- Confident, forward-looking, and enthusiastic — you are pitching the candidate, not auditing them.
+- Lead with what they bring: relevant wins, transferable skills, and genuine interest in the role.
+- NEVER apologize, disclaim, or call out missing requirements (e.g. do NOT write "I don't have X", "I will be upfront that I lack…", "While I haven't…", or similar admissions).
+- If the fit is a stretch, stay positive: emphasize adjacent experience, learning agility, and motivation — without naming gaps or unmet requirements.
+- Gap/mismatch notes in the input are for your awareness only so you do not invent credentials — never surface them in the letter.
+
+Rules:
+- Do NOT include letterhead (name, location, email, phone, LinkedIn, GitHub, website). The template already prints those three header lines.
+- Do NOT include a date line. Today's date is inserted automatically when the letter is saved as a PDF.
+- Start with the company name (optional) and then the salutation (e.g. "Dear Hiring Manager,") on its own line.
+- Put a blank line after the salutation, then the body (3–4 short paragraphs with a blank line between each).
+- Put a blank line before the closing. Then:
+Sincerely,
+${name}
+- "${name}" goes on the line immediately after "Sincerely,". No blank line between them, and never on the same line.
+- NEVER continue the first body sentence on the salutation line.
+- ONE PAGE ONLY. Target 250–400 words in the body (3–4 short paragraphs).
+- First person throughout — write as the candidate ("I", "my", "me").
+- Ground every claim in the resume and Q&A — NEVER invent employers, projects, degrees, or skills.
+- Open with a specific hook: why THIS role at THIS company (not generic enthusiasm).
+- Highlight 2–3 strongest, most relevant accomplishments that map to the job requirements.
+- Mirror key language from the job description where truthful.
+- Close with a confident call to action (e.g. look forward to discussing how your experience can contribute).
+- Do NOT add markdown, code fences, commentary, or notes after the letter.
+- NEVER use em dashes, en dashes, or " -- " as a dash. Use a comma, a period, or "to".
+- Output the complete letter text only, ready to copy or print.`;
+}
+
+function schemaExperienceExample() {
+  const identity = currentIdentity();
+  const job = identity?.experience[0];
+  const role = job?.roles[0];
+  return {
+    company: job?.company || 'Employer from profile',
+    locationDates: job?.locationDates || ', City, ST  (Dates)',
+    roles: [
+      {
+        title: role?.title || 'Job title from profile',
+        bullets: [{ text: 'accomplishment without leading dash', cutFirst: false }],
+      },
+    ],
+  };
+}
+
+function schemaProjectExample() {
+  const identity = currentIdentity();
+  const project = identity?.projects[0];
+  return {
+    title: project?.title || 'Project from profile',
+    bullets: [{ text: 'accomplishment. Stack only here if relevant to the JD.', cutFirst: false }],
+  };
+}
 
 const MAX_CLARIFYING_QUESTIONS = 3;
 const MAX_QUESTION_CHARS = 180;
@@ -327,10 +469,11 @@ export async function analyzeResumeForJob(
     },
     resume: resumeText.slice(0, 12000),
     prior_answers: compactPriorAnswers(priorAnswers),
-    known_project_details: CANDIDATE_FACTS.map((f) => ({
+    known_project_details: knownFacts().map((f) => ({
       topic: f.id,
       answer: f.answer,
     })),
+    profile_notes: currentIdentity()?.contextNotes.trim().slice(0, 20000) || null,
     output_schema: {
       gap_analysis: {
         strong_matches: [{ skill: 'string', resume_evidence: 'string' }],
@@ -420,6 +563,9 @@ export async function generateTailoredResume(
     'Candidate Q&A (authoritative — do not go beyond these confirmations):',
     JSON.stringify(answers),
     '',
+    'Candidate profile notes:',
+    currentIdentity()?.contextNotes.trim() || '(none)',
+    '',
     'Additional context from the candidate:',
     options.extraContext?.trim() || '(none provided)',
     '',
@@ -441,28 +587,8 @@ export async function generateTailoredResume(
     'Return JSON with this shape:',
     JSON.stringify({
       profile: '2-3 sentences wrapping to 4-5 lines, no I, no em dashes, tailored to this job',
-      experience: [
-        {
-          company: 'Kennametal',
-          locationDates: ', Seattle, WA / Pittsburgh, PA / Solon, OH  (Feb 2021-Present)',
-          roles: [
-            {
-              title: 'Regional Channel Representative',
-              bullets: [{ text: 'accomplishment without leading dash', cutFirst: false }],
-            },
-            {
-              title: 'Process Engineer',
-              bullets: [{ text: 'optional role', cutFirst: false }],
-            },
-          ],
-        },
-      ],
-      projects: [
-        {
-          title: 'NFL Data Platform (draftdna.com)',
-          bullets: [{ text: 'accomplishment. Stack only here if relevant to the JD.', cutFirst: false }],
-        },
-      ],
+      experience: [schemaExperienceExample()],
+      projects: [schemaProjectExample()],
       skills: [
         { heading: 'Data & Analytic Tools', items: ['Power BI', 'Python'] },
         { heading: 'Data Analysis', items: ['Forecasting', 'Data Storytelling'] },
@@ -472,10 +598,10 @@ export async function generateTailoredResume(
     '',
     revising
       ? 'Revise the current draft per the notes. Return the full updated resume JSON only.'
-      : 'Write a FULL one-page resume JSON now. Always include Kennametal + Regional Channel Representative. Default to also including Process Engineer. Pack the page with experience and project bullets, not a bloated skills list. Channel Rep 5-6 bullets, Process Engineer 3, primary project 4-5. Skills: two groups, each at most 2 wrapped lines, relevant tools first. No subtitle line. No em dashes. JSON only.',
+      : 'Write a FULL one-page resume JSON now. Use only employers, titles, and projects from the candidate profile / master resume. Pack the page with experience and project bullets, not a bloated skills list. Skills: two groups, each at most 2 wrapped lines, relevant tools first. No subtitle line. No em dashes. JSON only.',
   ].join('\n');
 
-  const text = await claudeText(revising ? REVISE_GENERATE_SYSTEM : GENERATE_SYSTEM, user, 12000);
+  const text = await claudeText(revising ? reviseSystemPrompt() : generateSystemPrompt(), user, 12000);
   if (!text) throw new Error('Empty response from AI');
 
   const parsed = parseJsonResponse<{
@@ -495,9 +621,10 @@ export async function generateTailoredResume(
         experience: parsed.experience ?? [],
         projects: parsed.projects ?? [],
         skills: parsed.skills ?? [],
-      })
+      }, currentIdentity())
     ),
-    options.previousDraft
+    options.previousDraft,
+    currentIdentity()
   );
 
   if (pageLength === 'one') {
@@ -703,9 +830,10 @@ function applyPatchedSections(
         experience: patched.experience ?? draft.experience,
         projects: patched.projects ?? draft.projects,
         skills: patched.skills ?? draft.skills,
-      })
+      }, currentIdentity())
     ),
-    draft
+    draft,
+    currentIdentity()
   );
 }
 
@@ -751,7 +879,7 @@ export async function auditTailoredResumeForAts(
       : 'Ask short questions only for brand-new missing facts not covered above.',
     '',
     'Known project details (may inform questions, do not contradict):',
-    JSON.stringify(CANDIDATE_FACTS.slice(0, 12)),
+    JSON.stringify(projectGrounding()),
     '',
     'Return JSON with this shape:',
     JSON.stringify({
@@ -984,7 +1112,7 @@ async function expandResumeDraft(
   ].join('\n');
 
   try {
-    const text = await claudeText(FILL_SYSTEM, user, 8000);
+    const text = await claudeText(fillSystemPrompt(), user, 8000);
     const parsed = parseJsonResponse<{
       header?: ResumeDraft['header'];
       education?: ResumeDraft['education'];
@@ -1001,55 +1129,12 @@ async function expandResumeDraft(
         experience: parsed.experience ?? draft.experience,
         projects: parsed.projects ?? draft.projects,
         skills: parsed.skills ?? draft.skills,
-      })
+      }, currentIdentity())
     );
   } catch {
     return draft;
   }
 }
-
-const COVER_LETTER_SYSTEM = `You are an expert career coach and cover letter writer with 15+ years of experience helping candidates land competitive roles.
-
-Write a concise, professional cover letter tailored to THIS specific job and company.
-
-Tone (critical):
-- Confident, forward-looking, and enthusiastic — you are pitching the candidate, not auditing them.
-- Lead with what they bring: relevant wins, transferable skills, and genuine interest in the role.
-- NEVER apologize, disclaim, or call out missing requirements (e.g. do NOT write "I don't have X", "I will be upfront that I lack…", "While I haven't…", or similar admissions).
-- If the fit is a stretch, stay positive: emphasize adjacent experience, learning agility, and motivation — without naming gaps or unmet requirements.
-- Gap/mismatch notes in the input are for your awareness only so you do not invent credentials — never surface them in the letter.
-
-Rules:
-- Do NOT include letterhead (name, location, email, phone, LinkedIn, GitHub, website). The template already prints those three header lines.
-- Do NOT include a date line. Today's date is inserted automatically when the letter is saved as a PDF.
-- Start with the company name (optional) and then the salutation (e.g. "Dear Hiring Manager,") on its own line.
-- Put a blank line after the salutation, then the body (3–4 short paragraphs with a blank line between each).
-- Put a blank line before the closing. Then:
-Sincerely,
-Trevor Faust
-- "Trevor Faust" goes on the line immediately after "Sincerely,". No blank line between them, and never on the same line.
-- NEVER continue the first body sentence on the salutation line.
-- ONE PAGE ONLY. Target 250–400 words in the body (3–4 short paragraphs).
-- First person throughout — write as the candidate ("I", "my", "me").
-- Ground every claim in the resume and Q&A — NEVER invent employers, projects, degrees, or skills.
-- Open with a specific hook: why THIS role at THIS company (not generic enthusiasm).
-- Highlight 2–3 strongest, most relevant accomplishments that map to the job requirements.
-- Mirror key language from the job description where truthful.
-- Close with a confident call to action (e.g. look forward to discussing how your experience can contribute).
-- Do NOT add markdown, code fences, commentary, or notes after the letter.
-- NEVER use em dashes, en dashes, or " -- " as a dash. Use a comma, a period, or "to".
-- Output the complete letter text only, ready to copy or print.`;
-
-const REVISE_COVER_LETTER_SYSTEM = `You revise an existing cover letter based on the candidate's feedback.
-
-The candidate already has a draft they mostly like. Apply their revision notes while keeping factual accuracy and first-person voice.
-
-Rules:
-- Start from current_draft. Apply ONLY the requested tweaks — do not rewrite from scratch unless they asked.
-- Same formatting rules as the original cover letter (no letterhead, no date line, salutation + body + Sincerely/Trevor Faust).
-- NEVER invent employers, projects, degrees, or skills.
-- NEVER use em dashes, en dashes, or " -- " as a dash.
-- Output the complete revised letter text only.`;
 
 function compactCoverLetterContext(gap: GapAnalysis) {
   return {
@@ -1088,6 +1173,9 @@ export async function generateCoverLetter(
     'Candidate Q&A (authoritative — do not go beyond these confirmations):',
     JSON.stringify(answers.slice(0, 12)),
     '',
+    'Candidate profile notes:',
+    currentIdentity()?.contextNotes.trim() || '(none)',
+    '',
     'Additional context from the candidate:',
     options.extraContext?.trim() || '(none provided)',
     '',
@@ -1108,12 +1196,12 @@ export async function generateCoverLetter(
   ].join('\n');
 
   const text = await claudeText(
-    revising ? REVISE_COVER_LETTER_SYSTEM : COVER_LETTER_SYSTEM,
+    revising ? coverLetterSystemPrompt(true) : coverLetterSystemPrompt(false),
     user,
     4096
   );
   if (!text) throw new Error('Empty cover letter response from AI');
-  return normalizeCoverLetterBody(text);
+  return normalizeCoverLetterBody(text, currentIdentity()?.displayName);
 }
 
 const INTERVIEW_PREP_SYSTEM = `You are an expert interview coach helping a candidate prepare for a specific job interview.
@@ -1123,7 +1211,7 @@ Generate realistic interview questions they are likely to face for THIS role, pa
 Rules:
 - Speak directly TO the candidate using "you" and "your" — never third person.
 - NEVER invent employers, projects, degrees, or skills not supported by the resume or prior answers.
-- Ground sample answers in their actual background. When evidence is thin, suggest honest framing (transferable skills, learning plans) — do not fabricate.
+- Ground sample answers in their actual background, including known_project_details and profile notes. When evidence is thin, suggest honest framing (transferable skills, learning plans) — do not fabricate.
 - Include a mix: behavioral (STAR-style), role-specific, technical or skills-based (appropriate to the job), and situational.
 - For each question, call out a strength to highlight when relevant, or a weakness/gap to address carefully when relevant.
 - sample_answer should be 3–6 sentences — a concrete talking track, not bullet fragments.
@@ -1150,6 +1238,7 @@ export async function generateInterviewQuestions(
     gap_analysis: context.gapAnalysis ? compactGapAnalysis(context.gapAnalysis) : null,
     prior_answers: priorAnswers.length ? priorAnswers : null,
     extra_context: context.extraContext?.trim().slice(0, 1500) || null,
+    project_grounding: projectGrounding(),
     output_schema: {
       overview: '2-3 sentences on interview focus areas for this role, speaking to the reader as "you"',
       questions: [
@@ -1171,7 +1260,7 @@ export async function generateInterviewQuestions(
     INTERVIEW_PREP_SYSTEM,
     `Generate interview prep for this candidate and role. Return JSON with overview and 6–8 questions.\n\n${userPrompt}`,
     6000,
-    getInterviewModel()
+    getClientRuntime().interviewModel
   );
 
   const parsed = parseJsonResponse<InterviewPrepResult>(raw);
@@ -1198,7 +1287,7 @@ export async function generateInterviewQuestions(
 const INTERVIEW_ANSWER_SYSTEM = `You are an expert interview coach. The candidate pasted a question they were actually asked (or expect to be asked). Draft a spoken answer grounded ONLY in their resume, prior Q&A from resume tailoring, extra context they provided, and this job.
 
 Rules:
-- talking_track: first person as the candidate ("I", "my") — 4–8 conversational sentences they can say out loud. Use STAR (situation, task, action, result) when it fits. Include concrete names, metrics, and outcomes from the source material.
+- talking_track: first person as the candidate ("I", "my") — 4–8 conversational sentences they can say out loud. Use STAR (situation, task, action, result) when it fits. Include concrete names, metrics, and outcomes from the resume, Q&A, and known_project_details.
 - framing: 1–3 sentences coaching THEM with "you" on how to structure and land the answer.
 - evidence: 2–5 short phrases naming the resume / Q&A facts you used. If you used none, say so.
 - watch_outs: optional. What to avoid (claiming a skill they don't have, rambling, underselling). Use "you".
@@ -1311,6 +1400,7 @@ export async function answerInterviewQuestion(
     gap_analysis: context.gapAnalysis ? compactGapAnalysis(context.gapAnalysis) : null,
     prior_answers: priorAnswers.length ? priorAnswers : null,
     extra_context: context.extraContext?.trim().slice(0, 1500) || null,
+    project_grounding: projectGrounding(),
     output_schema: {
       talking_track: 'string — first person spoken answer',
       framing: 'string — coaching in "you"',
@@ -1325,7 +1415,7 @@ export async function answerInterviewQuestion(
       ? `Revise this interview answer using only the candidate's notes. Keep it close to the current draft. Return JSON only.\n\n${userPrompt}`
       : `Draft an answer to this interviewer question. Return JSON only.\n\n${userPrompt}`,
     2500,
-    getInterviewModel()
+    getClientRuntime().interviewModel
   );
 
   const parsed = parseJsonResponse<InterviewQuestionAnswerResult>(raw);
@@ -1450,7 +1540,7 @@ export async function generateFollowUpContacts(
     FOLLOW_UP_CONTACTS_SYSTEM,
     `${modeHint} Return JSON only.\n\n${userPrompt}`,
     4000,
-    getInterviewModel()
+    getClientRuntime().interviewModel
   );
 
   const parsed = parseJsonResponse<FollowUpContactsResult>(raw);
@@ -1502,7 +1592,7 @@ export async function draftFollowUpContactMessage(
       ? `Revise the outreach draft for this contact. Return JSON only.\n\n${userPrompt}`
       : `Draft outreach for this contact. Return JSON only.\n\n${userPrompt}`,
     2000,
-    getInterviewModel()
+    getClientRuntime().interviewModel
   );
 
   const parsed = parseJsonResponse<{ connection_note?: string; follow_up_message?: string }>(raw);

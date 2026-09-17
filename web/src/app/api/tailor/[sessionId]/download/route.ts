@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { composeCoverLetter } from '@/lib/cover-letter';
-import { draftToPlainText, parseResumeOutput } from '@/lib/resume-draft';
+import { applyLockedStructure, draftToPlainText, parseResumeOutput } from '@/lib/resume-draft';
 import { textToDocxBuffer } from '@/lib/resume-docx';
 import { coverLetterToPdfBuffer, draftToPdfBuffer, textToPdfBuffer } from '@/lib/resume-pdf';
 import { getSubscriberByToken } from '@/lib/queries';
@@ -12,6 +12,7 @@ import {
   resolveJobForSession,
 } from '@/lib/resume-queries';
 import { resumeFileName } from '@/lib/resume-template';
+import { coverFromProfile, getOrCreateUserProfile, toCandidateIdentity } from '@/lib/user-profile';
 
 export const runtime = 'nodejs';
 
@@ -48,21 +49,28 @@ export async function GET(request: Request, { params }: { params: Params }) {
         : undefined;
 
   const job = await resolveJobForSession(session!, subscriber.id);
-  const safeName = resumeFileName(job?.title, { docType, format });
+  const profile = await getOrCreateUserProfile(subscriber.id);
+  const cover = coverFromProfile(profile);
+  const safeName = resumeFileName(job?.title, {
+    docType,
+    format,
+    candidateName: cover.name,
+  });
 
   let buffer: Buffer;
   if (docType === 'cover-letter') {
     buffer =
       format === 'pdf'
-        ? await coverLetterToPdfBuffer(draftText)
-        : await textToDocxBuffer(composeCoverLetter(draftText));
+        ? await coverLetterToPdfBuffer(draftText, cover)
+        : await textToDocxBuffer(composeCoverLetter(draftText, undefined, cover));
   } else {
     const structured = parseResumeOutput(draftText);
     if (structured) {
+      const locked = applyLockedStructure(structured.draft, toCandidateIdentity(profile));
       buffer =
         format === 'pdf'
-          ? await draftToPdfBuffer(structured.draft)
-          : await textToDocxBuffer(draftToPlainText(structured.draft), formatMeta);
+          ? await draftToPdfBuffer(locked)
+          : await textToDocxBuffer(draftToPlainText(locked), formatMeta);
     } else {
       buffer =
         format === 'pdf'

@@ -15,12 +15,13 @@ type Props = {
   stage?: string;
   sort: string;
   q: string;
+  preferredCategories?: string[];
 };
 
 const selectClass =
   'mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100';
 
-export function FilterSidebar({ filters, view, stage, sort, q }: Props) {
+export function FilterSidebar({ filters, view, stage, sort, q, preferredCategories }: Props) {
   const recencyValue =
     RECENCY_OPTIONS.find((o) => o.days === filters.recencyDays)?.id ?? '';
 
@@ -28,7 +29,9 @@ export function FilterSidebar({ filters, view, stage, sort, q }: Props) {
     filters.categories.length > 0
       ? filters.categories
       : view === 'preferred'
-        ? ALL_CATEGORY_IDS
+        ? preferredCategories?.length
+          ? preferredCategories
+          : ALL_CATEGORY_IDS
         : [];
 
   return (
@@ -84,7 +87,7 @@ export function FilterSidebar({ filters, view, stage, sort, q }: Props) {
         <fieldset className="space-y-2">
           <legend className="text-sm text-zinc-400">Interest areas</legend>
           <p className="text-xs text-zinc-600">
-            Used on the Preferred tab. Leave all checked for the widest match.
+            Used on the Preferred tab. Your saved defaults live in Profile; these checkboxes narrow this search.
           </p>
           <div className="max-h-48 space-y-1.5 overflow-y-auto rounded-lg border border-zinc-800 p-2">
             {INTEREST_CATEGORIES.map((cat) => (

@@ -1,11 +1,11 @@
 import { splitResumeOutput, stripEmDashes } from './resume-structure';
+import type { CandidateIdentity } from './user-profile';
 import {
   defaultResumeEducation,
   defaultResumeHeader,
-  emptyKennametalJob,
-  LOCKED_KENNAMETAL,
   parseCompanyLine,
   parseEducationLine,
+  projectSectionTitle,
   sanitizeResumeContact,
   type KeywordAlignmentItem,
   type ResumeDraft,
@@ -71,7 +71,7 @@ export function parseResumeOutput(text: string | null | undefined): ResumeSessio
     if (parsed?.version === 1 && parsed.draft && typeof parsed.draft.profile === 'string') {
       return {
         version: 1,
-        draft: applyLockedStructure(parsed.draft),
+        draft: sanitizeDraft(parsed.draft),
         keywordAlignment: Array.isArray(parsed.keywordAlignment) ? parsed.keywordAlignment : [],
       };
     }
@@ -81,11 +81,22 @@ export function parseResumeOutput(text: string | null | undefined): ResumeSessio
   return null;
 }
 
-function normalizeLocationDates(raw: string) {
+function normalizeLocationDates(raw: string, fallback = '') {
   const t = raw.trim();
   if (t.startsWith(',')) return t.startsWith(', ') ? t : `, ${t.slice(1).trim()}`;
-  if (!t) return LOCKED_KENNAMETAL.locationDates;
+  if (!t) return fallback;
   return `, ${t.replace(/^,\s*/, '')}`;
+}
+
+function companyKey(name: string) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function titlesMatch(a: string, b: string) {
+  const left = a.toLowerCase().trim();
+  const right = b.toLowerCase().trim();
+  if (!left || !right) return false;
+  return left === right || left.includes(right) || right.includes(left);
 }
 
 function asBullets(value: unknown): ResumeDraft['experience'][0]['roles'][0]['bullets'] {
@@ -104,29 +115,30 @@ function asBullets(value: unknown): ResumeDraft['experience'][0]['roles'][0]['bu
     });
 }
 
-function withHeader(input: ResumeDraft): ResumeHeader {
-  const fallback = defaultResumeHeader();
+function withHeader(input: ResumeDraft, identity?: CandidateIdentity | null): ResumeHeader {
+  const fallback = identity?.header ?? defaultResumeHeader();
   if (!input.header) return fallback;
+  const name = stripEmDashes(input.header.name ?? '') || fallback.name;
   return {
-    name: stripEmDashes(input.header.name ?? ''),
-    location: stripEmDashes(input.header.location ?? ''),
-    contact: sanitizeResumeContact(stripEmDashes(input.header.contact ?? '')),
+    name,
+    location: stripEmDashes(input.header.location ?? '') || fallback.location,
+    contact: sanitizeResumeContact(stripEmDashes(input.header.contact ?? '') || fallback.contact),
   };
 }
 
-function withEducation(input: ResumeDraft): ResumeEducation {
-  const fallback = defaultResumeEducation();
+function withEducation(input: ResumeDraft, identity?: CandidateIdentity | null): ResumeEducation {
+  const fallback = identity?.education ?? defaultResumeEducation();
   if (!input.education) return fallback;
   return {
-    schoolBold: stripEmDashes(input.education.schoolBold ?? ''),
-    schoolRest: stripEmDashes(input.education.schoolRest ?? ''),
-    degree: stripEmDashes(input.education.degree ?? ''),
-    minors: stripEmDashes(input.education.minors ?? ''),
+    schoolBold: stripEmDashes(input.education.schoolBold ?? '') || fallback.schoolBold,
+    schoolRest: stripEmDashes(input.education.schoolRest ?? '') || fallback.schoolRest,
+    degree: stripEmDashes(input.education.degree ?? '') || fallback.degree,
+    minors: stripEmDashes(input.education.minors ?? '') || fallback.minors,
   };
 }
-function foldProjectTitle(title: string, subtitle?: string) {
+
+function foldProjectTitle(title: string, subtitle?: string, allowDraftDna = false) {
   let next = stripEmDashes(title);
-  // Platform is the header; mock draft belongs in bullets, not the title.
   next = next
     .replace(/\s*&\s*Mock Draft Simulator\b/gi, '')
     .replace(/\s+Mock Draft Simulator\b/gi, '')
@@ -134,85 +146,165 @@ function foldProjectTitle(title: string, subtitle?: string) {
     .trim();
   const extra = stripEmDashes(subtitle ?? '');
   const blob = `${next} ${extra}`;
-  if (/draftdna\.com/i.test(blob) && !/draftdna\.com/i.test(next)) {
+  if (allowDraftDna && /draftdna\.com/i.test(blob) && !/draftdna\.com/i.test(next)) {
     next = `${next.replace(/[:\s]+$/, '').trim()} (draftdna.com)`;
   }
   return next;
 }
 
-export function applyLockedStructure(input: ResumeDraft): ResumeDraft {
-  const jobs = Array.isArray(input.experience) ? [...input.experience] : [];
-  const kennametalIdx = jobs.findIndex((j) => /kennametal/i.test(j.company ?? ''));
-  const kennametalSrc = kennametalIdx >= 0 ? jobs.splice(kennametalIdx, 1)[0] : emptyKennametalJob();
+function findMatchingJob(jobs: ResumeJob[], company: string): ResumeJob | undefined {
+  const key = companyKey(company);
+  if (!key) return undefined;
+  return (
+    jobs.find((j) => companyKey(j.company) === key) ??
+    jobs.find((j) => {
+      const other = companyKey(j.company);
+      return other.includes(key) || key.includes(other);
+    })
+  );
+}
 
-  const roles = Array.isArray(kennametalSrc.roles) ? [...kennametalSrc.roles] : [];
-  const channelIdx = roles.findIndex((r) => /channel representative/i.test(r.title ?? ''));
-  const channel = channelIdx >= 0 ? roles.splice(channelIdx, 1)[0] : { title: LOCKED_KENNAMETAL.channelRepTitle, bullets: [] };
+function findMatchingRole(roles: ResumeRole[], title: string): ResumeRole | undefined {
+  return roles.find((r) => titlesMatch(r.title, title));
+}
 
-  const lockedKennametal: ResumeJob = {
-    company: stripEmDashes(kennametalSrc.company?.trim() || LOCKED_KENNAMETAL.company),
-    locationDates: stripEmDashes(
-      normalizeLocationDates(kennametalSrc.locationDates || LOCKED_KENNAMETAL.locationDates)
-    ),
-    locked: true,
-    roles: [
-      {
-        title: stripEmDashes(channel.title?.trim() || LOCKED_KENNAMETAL.channelRepTitle),
-        locked: true,
-        bullets: asBullets(channel.bullets),
-      },
-      ...roles
-        .filter((r) => r.title?.trim())
-        .map((r) => ({
-          title: stripEmDashes(r.title.trim()),
-          locked: false,
-          bullets: asBullets(r.bullets),
-        })),
-    ],
-  };
+function findMatchingProject(projects: ResumeProject[], title: string): ResumeProject | undefined {
+  return projects.find((p) => titlesMatch(p.title, title));
+}
 
-  const extraJobs = jobs
-    .filter((j) => j.company?.trim() && !/kennametal/i.test(j.company))
+function sanitizeJobs(jobs: ResumeJob[]): ResumeJob[] {
+  return jobs
+    .filter((j) => j.company?.trim())
     .map((j) => ({
       company: stripEmDashes(j.company.trim()),
       locationDates: stripEmDashes(normalizeLocationDates(j.locationDates ?? '')),
-      locked: false,
+      locked: Boolean(j.locked),
       roles: (j.roles ?? [])
         .filter((r) => r.title?.trim())
         .map((r) => ({
           title: stripEmDashes(r.title.trim()),
-          locked: false,
+          locked: Boolean(r.locked),
+          includeByDefault: r.includeByDefault,
           bullets: asBullets(r.bullets),
         })),
     }));
+}
 
-  const skills = (input.skills ?? [])
-    .slice(0, 2)
-    .map((g) => ({
-      heading: (g.heading ?? '').trim() || 'Skills',
-      items: (g.items ?? []).map((i) => String(i).trim()).filter(Boolean),
-    }));
-
-  while (skills.length < 2) {
-    skills.push({ heading: skills.length === 0 ? 'Data & Analytic Tools' : 'Data Analysis', items: [] });
+function mergeExperience(generated: ResumeJob[], skeleton: ResumeJob[]): ResumeJob[] {
+  const jobs: ResumeJob[] = [];
+  for (const skel of skeleton) {
+    const match = findMatchingJob(generated, skel.company);
+    const genRoles = match?.roles ?? [];
+    const roles: ResumeRole[] = [];
+    for (const skelRole of skel.roles) {
+      const genRole = findMatchingRole(genRoles, skelRole.title);
+      const include =
+        Boolean(skelRole.locked) ||
+        skelRole.includeByDefault !== false ||
+        Boolean(genRole?.bullets.some((b) => b.text.trim()));
+      if (!include) continue;
+      roles.push({
+        title: stripEmDashes(skelRole.title),
+        locked: Boolean(skelRole.locked),
+        includeByDefault: skelRole.includeByDefault,
+        bullets: asBullets(genRole?.bullets?.length ? genRole.bullets : skelRole.bullets),
+      });
+    }
+    if (!roles.length) continue;
+    jobs.push({
+      company: stripEmDashes(skel.company),
+      locationDates: stripEmDashes(normalizeLocationDates(skel.locationDates, skel.locationDates)),
+      locked: true,
+      roles,
+    });
   }
+  return jobs;
+}
 
+function mergeProjects(
+  generated: ResumeProject[],
+  skeleton: ResumeProject[],
+  allowDraftDna: boolean
+): ResumeProject[] {
+  const merged: ResumeProject[] = [];
+  for (const skel of skeleton) {
+    const match = findMatchingProject(generated, skel.title);
+    const include =
+      Boolean(skel.locked) ||
+      skel.includeByDefault !== false ||
+      Boolean(match?.bullets.some((b) => b.text.trim()));
+    if (!include) continue;
+    merged.push({
+      title: foldProjectTitle(skel.title, undefined, allowDraftDna),
+      subtitle: undefined,
+      locked: Boolean(skel.locked),
+      includeByDefault: skel.includeByDefault,
+      bullets: asBullets(match?.bullets?.length ? match.bullets : skel.bullets),
+    });
+  }
+  if (merged.length) return merged;
+  return generated
+    .filter((p) => p.title?.trim())
+    .map((p) => ({
+      title: foldProjectTitle(p.title, p.subtitle, allowDraftDna),
+      subtitle: undefined,
+      bullets: asBullets(p.bullets),
+    }));
+}
+
+function capSkillGroups(input: ResumeSkillGroup[], identity?: CandidateIdentity | null): ResumeSkillGroup[] {
+  const source = (input ?? []).length ? input : identity?.skills ?? [];
+  const skills = source.slice(0, 2).map((g) => ({
+    heading: (g.heading ?? '').trim() || 'Skills',
+    items: (g.items ?? []).map((i) => String(i).trim()).filter(Boolean),
+  }));
+  while (skills.length < 2) {
+    skills.push({ heading: skills.length === 0 ? 'Tools' : 'Skills', items: [] });
+  }
+  return skills.map((g) => ({
+    heading: stripEmDashes(g.heading),
+    items: capSkillsItems(g.items.map((i) => stripEmDashes(i)).filter(Boolean)),
+  }));
+}
+
+export function sanitizeDraft(input: ResumeDraft, identity?: CandidateIdentity | null): ResumeDraft {
   return {
-    header: withHeader(input),
-    education: withEducation(input),
+    header: withHeader(input, identity),
+    education: withEducation(input, identity),
     profile: clampProfileText(input.profile ?? ''),
-    experience: [lockedKennametal, ...extraJobs],
+    experience: sanitizeJobs(Array.isArray(input.experience) ? input.experience : []),
     projects: (input.projects ?? [])
       .filter((p) => p.title?.trim())
       .map((p) => ({
-        title: foldProjectTitle(p.title, p.subtitle),
+        title: foldProjectTitle(p.title, p.subtitle, /draftdna/i.test(p.title)),
         subtitle: undefined,
         bullets: asBullets(p.bullets),
       })),
-    skills: skills.map((g) => ({
-      heading: stripEmDashes(g.heading),
-      items: capSkillsItems(g.items.map((i) => stripEmDashes(i)).filter(Boolean)),
-    })),
+    skills: capSkillGroups(input.skills ?? [], identity),
+    projectsSectionTitle: input.projectsSectionTitle || identity?.projectsSectionTitle,
+  };
+}
+
+export function applyLockedStructure(input: ResumeDraft, identityArg?: CandidateIdentity | null): ResumeDraft {
+  const identity = identityArg ?? null;
+  const sanitized = sanitizeDraft(input, identity);
+  if (!identity) return sanitized;
+
+  const allowDraftDna = identity.projects.some((p) => /draftdna/i.test(p.title));
+  const experience = identity.experience.length
+    ? mergeExperience(sanitized.experience, identity.experience)
+    : sanitized.experience;
+  const projects = identity.projects.length
+    ? mergeProjects(sanitized.projects, identity.projects, allowDraftDna)
+    : sanitized.projects;
+
+  return {
+    ...sanitized,
+    header: identity.header.name.trim() ? identity.header : sanitized.header,
+    education: identity.education.schoolBold.trim() ? identity.education : sanitized.education,
+    experience,
+    projects,
+    projectsSectionTitle: identity.projectsSectionTitle || sanitized.projectsSectionTitle,
   };
 }
 
@@ -243,7 +335,7 @@ export function draftToPlainText(draft: ResumeDraft): string {
     }
   }
   lines.push('');
-  lines.push('DATA & ANALYTICS PROJECTS');
+  lines.push(projectSectionTitle(draft).toUpperCase());
   for (const project of draft.projects) {
     lines.push(project.title);
     if (project.subtitle) lines.push(project.subtitle);
@@ -273,8 +365,12 @@ export function countResumeBullets(draft: ResumeDraft): number {
   return n;
 }
 
-/** Keep user-edited header, education, and Kennametal labels across regenerate. */
-export function preserveIdentityFields(generated: ResumeDraft, previous?: ResumeDraft | null): ResumeDraft {
+/** Keep user-edited header, education, and locked job labels across regenerate. */
+export function preserveIdentityFields(
+  generated: ResumeDraft,
+  previous?: ResumeDraft | null,
+  identity?: CandidateIdentity | null
+): ResumeDraft {
   if (!previous) return generated;
   const next: ResumeDraft = {
     ...generated,
@@ -285,19 +381,27 @@ export function preserveIdentityFields(generated: ResumeDraft, previous?: Resume
         }
       : generated.header,
     education: previous.education ?? generated.education,
+    projectsSectionTitle: previous.projectsSectionTitle || generated.projectsSectionTitle,
   };
-  const prevJob = previous.experience[0];
-  const nextJob = next.experience[0];
-  if (!prevJob || !nextJob) return next;
-  const prevChannel = prevJob.roles.find((r) => r.locked) ?? prevJob.roles[0];
-  next.experience[0] = {
-    ...nextJob,
-    company: prevJob.company,
-    locationDates: prevJob.locationDates,
-    roles: nextJob.roles.map((role, i) =>
-      i === 0 && prevChannel ? { ...role, title: prevChannel.title } : role
-    ),
-  };
+
+  if (identity?.experience.length) {
+    return applyLockedStructure(next, identity);
+  }
+
+  if (!previous.experience[0] || !next.experience[0]) return next;
+  next.experience = next.experience.map((job, jobIndex) => {
+    const prevJob = previous.experience[jobIndex];
+    if (!prevJob) return job;
+    return {
+      ...job,
+      company: prevJob.company,
+      locationDates: prevJob.locationDates,
+      roles: job.roles.map((role, roleIndex) => {
+        const prevRole = prevJob.roles[roleIndex];
+        return prevRole ? { ...role, title: prevRole.title } : role;
+      }),
+    };
+  });
   return next;
 }
 
@@ -362,7 +466,7 @@ function parsePlainExperience(lines: string[]): ResumeJob[] {
         company: stripEmDashes(parsed.company),
         locationDates: stripEmDashes(parsed.locationDates),
         roles: [],
-        locked: /kennametal/i.test(parsed.company),
+        locked: false,
       };
       continue;
     }
@@ -477,7 +581,7 @@ export function plainTextToResumeDraft(text: string | null | undefined): ResumeD
   };
 
   if (!draft.profile && !draft.experience.length && !draft.projects.length) return null;
-  return applyLockedStructure(draft);
+  return sanitizeDraft(draft);
 }
 
 /** JSON draft when available; otherwise rebuild from legacy plain-text output. */

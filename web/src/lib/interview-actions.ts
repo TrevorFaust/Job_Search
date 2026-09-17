@@ -11,6 +11,7 @@ import {
   type InterviewPrepResult,
   type InterviewQuestionAnswerResult,
 } from './llm';
+import { withUserAi } from './user-ai';
 import {
   getActiveResume,
   getJobById,
@@ -239,13 +240,15 @@ export async function generateInterviewPrepForJob(
       manualJobId ?? null
     );
 
-  const result = await generateInterviewQuestions({
+  const result = await withUserAi(sub, () =>
+    generateInterviewQuestions({
     resumeText: resume.content_text,
     job,
     gapAnalysis,
     priorAnswers,
     extraContext,
-  });
+    })
+  );
 
   const stored: StoredInterviewPrep = {
     ...result,
@@ -302,7 +305,8 @@ export async function answerInterviewQuestionForJob(
     throw new Error('Could not find that draft to tweak');
   }
 
-  const result = await answerInterviewQuestion(
+  const result = await withUserAi(sub, () =>
+    answerInterviewQuestion(
     {
       resumeText: resume.content_text,
       job,
@@ -322,6 +326,7 @@ export async function answerInterviewQuestionForJob(
           notes,
         }
       : undefined
+    )
   );
 
   if (!result.talking_track) {

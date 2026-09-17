@@ -13,6 +13,7 @@ import {
   educationLine,
   parseCompanyLine,
   parseEducationLine,
+  projectSectionTitle,
 } from '@/lib/resume-template';
 import { suggestedBulletsFor } from '@/lib/resume-bullet-bank';
 
@@ -235,7 +236,7 @@ export function ResumePreview({ draft, onChange, saving, saved, readOnly = false
             />
           ))}
 
-          <SectionTitle>{SECTION_TITLES.projects}</SectionTitle>
+          <SectionTitle>{projectSectionTitle(draft)}</SectionTitle>
           {draft.projects.map((project, i) => (
             <ProjectBlock
               key={i}

@@ -1,9 +1,11 @@
 import Link from 'next/link';
+import { SiteLogo } from '@/components/SiteLogo';
 import { signInWithEmail } from '@/lib/actions';
 
 export default function SignInPage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6">
+      <SiteLogo size={112} className="mb-6" priority />
       <Link href="/" className="mb-8 text-sm text-zinc-500 hover:text-amber-300">
         ← Back to job board
       </Link>

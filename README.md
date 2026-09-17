@@ -97,7 +97,9 @@ Or from the repo root: `npm run web:dev`.
 
 **`.env.local` needs:**
 - `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (same project as the scraper)
-- `ANTHROPIC_API_KEY` — required for resume gap analysis and tailoring
+- `ANTHROPIC_API_KEY` — used only for the **owner** account (email matching `EMAIL_TO` / `OWNER_EMAIL`) if they have not saved their own key. Everyone else must add an Anthropic or OpenAI key in Profile.
+- Optional: `OWNER_EMAIL` — defaults to `EMAIL_TO`
+- Optional: `LLM_KEY_ENCRYPTION_SECRET` — encrypts saved user API keys (falls back to hashing `SUPABASE_SERVICE_ROLE_KEY`)
 
 1. **Browse** — all scraped jobs on the board (no sign-in required). Tabs:
    - **All jobs** — full catalog with sidebar filters
@@ -108,12 +110,13 @@ Or from the repo root: `npm run web:dev`.
    cookie (no password).
 3. **Filters** — posted-within, min salary, location radius, remote/hybrid/onsite,
    interest categories, and text search. Sort by date or salary.
-4. **Preferences** — `/settings/<edit_token>` (link printed on first subscriber
-   creation, or from the header when signed in). Multiple **digest profiles** with
-   their own keywords, exclusions, locations, remote-only, min salary, and email
-   frequency (daily / every 3 days / weekly).
-5. **Resume** — upload a master resume in settings; open any job to **tailor**
-   a version with Claude (PDF/DOCX download).
+4. **Preferences / Profile** — `/settings/<edit_token>` (from the header when signed in). Each user has:
+   - **Profile** — name, contact, school, jobs, projects, standing notes
+   - **Preferred jobs** — interest categories for the Preferred tab
+   - **AI billing** — their own Anthropic or OpenAI key (required for anyone other than the site owner)
+   - **Master resume** — upload/paste; used as the source library for tailoring
+   - **Digest emails** — keyword hunt profiles (daily / every 3 days / weekly)
+5. **Resume tailoring** — open any job to tailor a version with that user's profile + resume (PDF/DOCX download). Clarifying answers accumulate on the profile.
 6. **Manual jobs** — paste roles from outside the scrapers and tailor resumes
    for those too.
 

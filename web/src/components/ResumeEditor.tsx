@@ -51,7 +51,7 @@ export function ResumeEditor({ token, resume }: Props) {
             {resume.label}
             {resume.source_filename ? ` · ${resume.source_filename}` : ''}
             {' · '}
-            {resume.content_text.length.toLocaleString()} characters
+            {resume.content_text.length.toLocaleString('en-US')} characters
           </p>
         </div>
       )}

@@ -67,6 +67,8 @@ export function BoardPageClient() {
         priorityJobIds={data.priorityJobIds}
         organizations={data.organizations}
         locations={data.locations}
+        preferredCategories={data.preferredCategories}
+        settingsToken={data.settingsToken}
       />
     </div>
   );

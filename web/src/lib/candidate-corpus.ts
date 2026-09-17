@@ -80,7 +80,7 @@ async function fetchRecentSessionCorpusRows(subscriberId: string): Promise<Sessi
 }
 
 async function buildCandidateExperienceCorpus(subscriberId: string): Promise<string | null> {
-  const [resumesRes, bankRes, sessions, appsRes] = await Promise.all([
+  const [resumesRes, bankRes, sessions, appsRes, profileRes] = await Promise.all([
     getDb()
       .from('resumes')
       .select('content_text')
@@ -96,14 +96,35 @@ async function buildCandidateExperienceCorpus(subscriberId: string): Promise<str
       .from('job_applications')
       .select('interview_prep')
       .eq('subscriber_id', subscriberId),
+    getDb()
+      .from('user_profiles')
+      .select('context_notes, learned_facts, experience, projects')
+      .eq('subscriber_id', subscriberId)
+      .maybeSingle(),
   ]);
 
   if (resumesRes.error) throw resumesRes.error;
   if (bankRes.error) throw bankRes.error;
   if (appsRes.error) throw appsRes.error;
+  if (profileRes.error) throw profileRes.error;
 
   const chunks: string[] = [];
   const seen = new Set<string>();
+
+  const profile = profileRes.data as
+    | { context_notes?: string; learned_facts?: unknown; experience?: unknown; projects?: unknown }
+    | null;
+  pushUnique(chunks, seen, profile?.context_notes);
+  if (Array.isArray(profile?.learned_facts)) {
+    for (const fact of profile.learned_facts) {
+      if (fact && typeof fact === 'object' && 'answer' in fact) {
+        const row = fact as { topic?: string; answer?: string };
+        pushUnique(chunks, seen, [row.topic && `Topic: ${row.topic}`, row.answer && `A: ${row.answer}`].filter(Boolean).join('\n'));
+      }
+    }
+  }
+  if (profile?.experience) pushUnique(chunks, seen, JSON.stringify(profile.experience));
+  if (profile?.projects) pushUnique(chunks, seen, JSON.stringify(profile.projects));
 
   for (const row of resumesRes.data ?? []) {
     pushUnique(chunks, seen, row.content_text as string);

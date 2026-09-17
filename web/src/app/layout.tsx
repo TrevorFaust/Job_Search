@@ -16,7 +16,7 @@ const body = IBM_Plex_Sans({
 });
 
 export const metadata: Metadata = {
-  title: 'Job Hunter',
+  title: 'HustleHunter',
   description: 'Daily job digests matched to your filters',
 };
 
