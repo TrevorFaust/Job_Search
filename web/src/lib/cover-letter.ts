@@ -79,14 +79,26 @@ export function composeCoverLetter(
   return [...coverLetterHeaderLines(identity), '', coverLetterDate(now), '', letter].join('\n').trim();
 }
 
-const CLOSING_TAIL = /\s*(sincerely,?)\s*([A-Z][^\n]{0,80})?\s*$/i;
-
-function closingName(name?: string) {
-  return name?.trim() || 'Applicant';
+function resolveClosingName(existing: string, candidateName?: string) {
+  const typed = existing.trim();
+  if (typed && !/^applicant$/i.test(typed)) return typed;
+  return candidateName?.trim() || typed || 'Applicant';
 }
 
-function closingBlock(name?: string) {
-  return `\n\nSincerely,\n${closingName(name)}`;
+function takeClosing(text: string): { body: string; found: string } | null {
+  const block = text.match(/(?:^|\n)[ \t]*sincerely,?[ \t]*\n[ \t]*([^\n]*)[ \t]*$/i);
+  if (block?.index != null) {
+    return { body: text.slice(0, block.index).trimEnd(), found: (block[1] ?? '').trim() };
+  }
+  const alone = text.match(/(?:^|\n)[ \t]*sincerely,?[ \t]*$/i);
+  if (alone?.index != null) {
+    return { body: text.slice(0, alone.index).trimEnd(), found: '' };
+  }
+  const sameLine = text.match(/(?:^|\n)[ \t]*sincerely,[ \t]+([^\n]+)[ \t]*$/i);
+  if (sameLine?.index != null) {
+    return { body: text.slice(0, sameLine.index).trimEnd(), found: (sameLine[1] ?? '').trim() };
+  }
+  return null;
 }
 
 /** Keep salutation, body, then closing with the name on the next line. */
@@ -94,18 +106,20 @@ export function structureCoverLetterBody(body: string, candidateName?: string): 
   let text = body.replace(/\r\n/g, '\n').trim();
   if (!text) return '';
 
-  const closing = closingBlock(candidateName);
-  if (CLOSING_TAIL.test(text)) {
-    text = text.replace(CLOSING_TAIL, '').trimEnd();
-    text = `${text}${closing}`;
-  } else if (!/\bsincerely\b/i.test(text)) {
-    text = `${text}${closing}`;
-  } else {
-    text = text.replace(/\n*(sincerely,?)\n*([A-Z][^\n]{0,80})?\s*$/i, closing);
-  }
+  const closing = takeClosing(text);
+  const name = resolveClosingName(closing?.found ?? '', candidateName);
+  if (closing) text = closing.body;
+  text = `${text}\n\nSincerely,\n${name}`;
 
   text = text.replace(/(^|\n)(dear[^\n,]+,)[ \t]*/gi, '$1$2\n\n');
   return text.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/** Editor paragraphs. Leaves spaces and wording alone so typing is not rewritten. */
+export function coverLetterEditParagraphs(body: string): string[] {
+  const text = body.replace(/\r\n/g, '\n');
+  if (!text) return [''];
+  return text.split(/\n{2,}/);
 }
 
 /** Compact header; body spacing stretches or shrinks to stay on one page. */
@@ -130,8 +144,8 @@ export type CoverLetterSpacing = {
   paragraphGap: number;
 };
 
-export function parseCoverLetterParagraphs(body: string): string[] {
-  return normalizeCoverLetterBody(body)
+export function parseCoverLetterParagraphs(body: string, candidateName?: string): string[] {
+  return normalizeCoverLetterBody(body, candidateName)
     .split(/\n\s*\n/)
     .map((p) => p.trim())
     .filter(Boolean);
@@ -228,7 +242,8 @@ export function coverLetterSpacingForBody(body: string): {
   paragraphs: string[];
   spacing: CoverLetterSpacing;
 } {
-  const paragraphs = parseCoverLetterParagraphs(body);
-  const lines = countCoverLetterBodyLines(paragraphs);
-  return { paragraphs, spacing: computeCoverLetterSpacing(lines, paragraphs) };
+  const paragraphs = coverLetterEditParagraphs(body);
+  const visible = paragraphs.map((p) => p.trim()).filter(Boolean);
+  const lines = countCoverLetterBodyLines(visible);
+  return { paragraphs, spacing: computeCoverLetterSpacing(lines, visible) };
 }

@@ -642,7 +642,11 @@ export async function saveCoverLetter(sessionId: string, coverLetterText: string
   const sub = await requireSubscriber();
   const session = await getTailoringSession(sessionId, sub.id);
   if (!session) throw new Error('Session not found');
-  const cover_letter_text = normalizeCoverLetterBody(coverLetterText);
+  const profile = await getOrCreateUserProfile(sub.id);
+  const cover_letter_text = normalizeCoverLetterBody(
+    coverLetterText,
+    toCandidateIdentity(profile).displayName
+  );
   if (!cover_letter_text.trim()) throw new Error('Cover letter is empty');
   await updateSession(sessionId, sub.id, { cover_letter_text });
   return { cover_letter_text };
@@ -796,8 +800,10 @@ export async function reviseTailoredDraft(
       };
     }
 
+    const profile = await getOrCreateUserProfile(sub.id);
     const previousBody = normalizeCoverLetterBody(
-      currentCoverLetter ?? session.cover_letter_text ?? ''
+      currentCoverLetter ?? session.cover_letter_text ?? '',
+      toCandidateIdentity(profile).displayName
     );
     if (!previousBody.trim()) throw new Error('No cover letter draft to revise');
 

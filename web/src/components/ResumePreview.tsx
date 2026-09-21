@@ -27,6 +27,11 @@ type Props = {
 
 const SHEET_IN = 11;
 
+function autosize(el: HTMLTextAreaElement) {
+  el.style.height = '0px';
+  el.style.height = `${el.scrollHeight}px`;
+}
+
 function AutoTextarea({
   value,
   onChange,
@@ -47,8 +52,14 @@ function AutoTextarea({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${el.scrollHeight}px`;
+    const run = () => autosize(el);
+    run();
+    const fonts = document.fonts;
+    if (!fonts) return;
+    const onDone = () => run();
+    void fonts.ready.then(onDone);
+    fonts.addEventListener('loadingdone', onDone);
+    return () => fonts.removeEventListener('loadingdone', onDone);
   }, [value]);
 
   return (
@@ -114,24 +125,36 @@ function updateJob(draft: ResumeDraft, jobIndex: number, job: ResumeJob): Resume
 }
 
 export function ResumePreview({ draft, onChange, saving, saved, readOnly = false }: Props) {
+  const sheetRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const [overflowLines, setOverflowLines] = useState(0);
   const [emptyLines, setEmptyLines] = useState(0);
 
   useEffect(() => {
-    const el = contentRef.current;
-    if (!el) return;
-    const pt = 96 / 72;
-    const innerPx = SHEET_IN * 96 - (TOP_NAME_Y + BOTTOM_MARGIN) * pt;
-    const extra = el.scrollHeight - innerPx;
-    const linePx = LINE_HEIGHT * pt;
-    if (extra > linePx) {
-      setOverflowLines(Math.ceil(extra / linePx));
-      setEmptyLines(0);
-    } else {
-      setOverflowLines(0);
-      setEmptyLines(Math.max(0, Math.round(-extra / linePx)));
-    }
+    const content = contentRef.current;
+    const sheet = sheetRef.current;
+    if (!content || !sheet) return;
+
+    const measure = () => {
+      if (sheet.offsetWidth < 200) return;
+      const pageHeight = sheet.offsetWidth * (SHEET_IN / 8.5);
+      const style = getComputedStyle(sheet);
+      const available =
+        pageHeight - (parseFloat(style.paddingTop) || 0) - (parseFloat(style.paddingBottom) || 0);
+      const linePx = LINE_HEIGHT * (96 / 72);
+      const extra = content.scrollHeight - available;
+      const nextOverflow = extra > linePx ? Math.ceil(extra / linePx) : 0;
+      const nextEmpty = nextOverflow > 0 ? 0 : Math.max(0, Math.round(-extra / linePx));
+      setOverflowLines((prev) => (prev === nextOverflow ? prev : nextOverflow));
+      setEmptyLines((prev) => (prev === nextEmpty ? prev : nextEmpty));
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(content);
+    const fonts = document.fonts;
+    void fonts?.ready.then(measure);
+    return () => observer.disconnect();
   }, [draft]);
 
   const header = draft.header ?? defaultResumeHeader();
@@ -147,7 +170,7 @@ export function ResumePreview({ draft, onChange, saving, saved, readOnly = false
           </p>
         ) : emptyLines > 3 ? (
           <p className="rounded-md border border-amber-800/50 bg-amber-950/20 px-2.5 py-1 text-amber-200/90">
-            About {emptyLines} lines of room at the bottom — lighter than your usual packed page. Add bullets or regenerate.
+            About {emptyLines} lines of room left on the printed page. Add a bullet below if you want it fuller.
           </p>
         ) : (
           <p className="rounded-md border border-emerald-800/60 bg-emerald-950/30 px-2.5 py-1 text-emerald-300">
@@ -162,10 +185,10 @@ export function ResumePreview({ draft, onChange, saving, saved, readOnly = false
 
       <div className={`rounded-lg border border-zinc-700 bg-zinc-950 p-3 ${readOnly ? 'overflow-visible' : 'overflow-x-auto'}`}>
         <div
+          ref={sheetRef}
           className="mx-auto bg-white text-black shadow-xl"
           style={{
             width: '8.5in',
-            minHeight: readOnly ? undefined : '11in',
             padding: `${TOP_NAME_Y}pt 21pt ${BOTTOM_MARGIN}pt 18pt`,
             fontFamily: "Cambria, Caladea, 'Times New Roman', serif",
             fontSize: '11pt',

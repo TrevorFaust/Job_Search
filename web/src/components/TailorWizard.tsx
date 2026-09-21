@@ -235,8 +235,9 @@ export function TailorWizard({
     return withFactDrafts(initialSession.questions ?? [], map, identity?.facts);
   });
   const [output, setOutput] = useState(initialSession.output_text ?? '');
+  const coverName = identity?.displayName;
   const [coverLetterOutput, setCoverLetterOutput] = useState(
-    initialSession.cover_letter_text ? normalizeCoverLetterBody(initialSession.cover_letter_text) : ''
+    initialSession.cover_letter_text ? normalizeCoverLetterBody(initialSession.cover_letter_text, coverName) : ''
   );
   const [draftView, setDraftView] = useState<'resume' | 'cover-letter'>('resume');
   const [resumeDraft, setResumeDraft] = useState<ResumeDraft | null>(
@@ -350,7 +351,7 @@ export function TailorWizard({
         setOutput(result.output_text);
         setResumeDraft(resolveResumeFromOutput(result.output_text)?.draft ?? null);
         setCoverLetterOutput(
-          result.cover_letter_text ? normalizeCoverLetterBody(result.cover_letter_text) : ''
+          result.cover_letter_text ? normalizeCoverLetterBody(result.cover_letter_text, coverName) : ''
         );
         setFitMessage(null);
         const audit = isAtsAudit(result.ats_audit) ? result.ats_audit : null;
@@ -378,7 +379,7 @@ export function TailorWizard({
     startTransition(async () => {
       try {
         const result = await generateCoverLetterDraft(session.id, extraContext);
-        setCoverLetterOutput(normalizeCoverLetterBody(result.cover_letter_text));
+        setCoverLetterOutput(normalizeCoverLetterBody(result.cover_letter_text, coverName));
         setSession((s) => ({ ...s, cover_letter_text: result.cover_letter_text }));
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Cover letter generation failed');
@@ -437,7 +438,7 @@ export function TailorWizard({
           setAtsRebuttals({});
         }
         if (target === 'cover-letter') {
-          setCoverLetterOutput(normalizeCoverLetterBody(result.cover_letter_text ?? ''));
+          setCoverLetterOutput(normalizeCoverLetterBody(result.cover_letter_text ?? '', coverName));
         }
         setSession((s) => ({
           ...s,
@@ -1139,7 +1140,7 @@ export function TailorWizard({
               ? resumeDraft
                 ? 'Edit bullets in the preview. Header and education start filled in. Trim to one page removes extras when the PDF would spill. PDF uses Cambria 11pt.'
                 : 'Legacy plain-text draft — regenerate for the structured Cambria editor.'
-              : 'Header and date are locked. The body auto-saves. Download PDF for Cambria 11, same as the resume.'}
+              : 'Click the letter to edit any paragraph, including the name under Sincerely. Header and date stay locked. Download PDF for Cambria 11, same as the resume.'}
           </p>
         </section>
       )}

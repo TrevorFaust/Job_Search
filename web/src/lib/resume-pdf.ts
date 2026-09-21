@@ -376,7 +376,7 @@ function layoutCoverLetter(doc: PDFKit.PDFDocument, raw: string, identity?: Cove
   const fonts = registerFonts(doc);
   const margin = COVER_LETTER_MARGIN_PT;
   const width = PAGE_WIDTH - margin * 2;
-  const paragraphs = parseCoverLetterParagraphs(raw);
+  const paragraphs = parseCoverLetterParagraphs(raw, identity?.name);
 
   doc.font(fonts.regular).fontSize(BODY_SIZE).fillColor('#000000');
   let bodyLines = 0;

@@ -5,7 +5,6 @@ import {
   coverLetterDate,
   coverLetterHeaderLines,
   coverLetterSpacingForBody,
-  normalizeCoverLetterBody,
 } from '@/lib/cover-letter';
 
 type Props = {
@@ -17,6 +16,11 @@ type Props = {
   headerLines?: [string, string, string];
   candidateName?: string;
 };
+
+function autosize(el: HTMLTextAreaElement) {
+  el.style.height = '0px';
+  el.style.height = `${el.scrollHeight}px`;
+}
 
 function AutoTextarea({
   value,
@@ -36,8 +40,14 @@ function AutoTextarea({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${el.scrollHeight}px`;
+    const run = () => autosize(el);
+    run();
+    const fonts = document.fonts;
+    if (!fonts) return;
+    const onDone = () => run();
+    void fonts.ready.then(onDone);
+    fonts.addEventListener('loadingdone', onDone);
+    return () => fonts.removeEventListener('loadingdone', onDone);
   }, [value]);
 
   return (
@@ -67,7 +77,7 @@ export function CoverLetterPreview({
 
   function updateParagraph(index: number, text: string) {
     const next = paragraphs.map((p, i) => (i === index ? text : p));
-    onChange(normalizeCoverLetterBody(next.join('\n\n')));
+    onChange(next.join('\n\n'));
   }
 
   return (
@@ -76,7 +86,7 @@ export function CoverLetterPreview({
       <div className="flex flex-wrap items-center gap-3 text-xs">
         {saving && <span className="text-zinc-500">Saving…</span>}
         {saved && !saving && <span className="text-emerald-400/80">Saved</span>}
-        <span className="text-zinc-600">Header and date stay locked. Click the letter body to edit.</span>
+        <span className="text-zinc-600">Header and date stay locked. Click any paragraph, including the name under Sincerely, to edit.</span>
       </div>
       )}
 
@@ -124,7 +134,13 @@ export function CoverLetterPreview({
                   <div
                     key={i}
                     style={{
-                      marginBottom: i < paragraphs.length - 1 ? `${spacing.paragraphGap}pt` : 0,
+                      paddingBottom: i < paragraphs.length - 1 ? `${spacing.paragraphGap}pt` : 0,
+                    }}
+                    onMouseDown={(event) => {
+                      if (readOnly) return;
+                      const target = event.target as HTMLElement;
+                      if (target.tagName === 'TEXTAREA') return;
+                      event.currentTarget.querySelector('textarea')?.focus();
                     }}
                   >
                     {readOnly ? (
@@ -132,10 +148,11 @@ export function CoverLetterPreview({
                         {paragraph}
                       </p>
                     ) : (
-                      <AutoTextarea
-                        value={paragraph}
+                      <ParagraphFields
+                        paragraph={paragraph}
+                        lineHeight={spacing.lineHeight}
+                        candidateName={candidateName}
                         onChange={(text) => updateParagraph(i, text)}
-                        style={{ lineHeight: `${spacing.lineHeight}pt` }}
                       />
                     )}
                   </div>
@@ -145,6 +162,37 @@ export function CoverLetterPreview({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ParagraphFields({
+  paragraph,
+  lineHeight,
+  candidateName,
+  onChange,
+}: {
+  paragraph: string;
+  lineHeight: number;
+  candidateName?: string;
+  onChange: (text: string) => void;
+}) {
+  const style = { lineHeight: `${lineHeight}pt` };
+  const splitAt = paragraph.indexOf('\n');
+  const head = splitAt >= 0 ? paragraph.slice(0, splitAt) : paragraph;
+  const name = splitAt >= 0 ? paragraph.slice(splitAt + 1) : '';
+  if (!/^[ \t]*sincerely,?[ \t]*$/i.test(head)) {
+    return <AutoTextarea value={paragraph} onChange={onChange} style={style} />;
+  }
+  return (
+    <div>
+      <AutoTextarea value={head} onChange={(line) => onChange(`${line}\n${name}`)} style={style} />
+      <AutoTextarea
+        value={name}
+        placeholder={candidateName || 'Your name'}
+        onChange={(line) => onChange(`${head}\n${line}`)}
+        style={style}
+      />
     </div>
   );
 }
