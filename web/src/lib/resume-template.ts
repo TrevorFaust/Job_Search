@@ -13,14 +13,18 @@ export const CONTENT_WIDTH = RULE_RIGHT - LEFT;
 export const BULLET_INDENT = 4.5;
 export const TOP_NAME_Y = 19.5;
 export const BOTTOM_MARGIN = 14;
-/** Keep filling until leftover space is under ~1 line. */
-export const FILL_IF_SLACK_PT = 10;
 /** Each Relevant Skills group (the tool list, not the heading) wraps to at most this many lines. */
 export const SKILLS_MAX_LINES = 2;
 export const BODY_SIZE = 11;
 export const NAME_SIZE = 26;
 export const LINE_HEIGHT = 12.9;
 export const LINE_GAP = LINE_HEIGHT - BODY_SIZE;
+/**
+ * Leftover letter-page space that still reads as a full sheet.
+ * The preview ends at the last line, so about an inch under the text is not a short resume.
+ */
+export const FULL_PAGE_SLACK_LINES = 8;
+export const FILL_IF_SLACK_PT = FULL_PAGE_SLACK_LINES * LINE_HEIGHT;
 
 export const LOCKED_HEADER = {
   name: 'TREVOR FAUST',

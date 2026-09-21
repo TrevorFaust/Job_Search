@@ -290,7 +290,7 @@ ${identityJobOutline()}
 
 ${PUNCTUATION_RULE}
 
-The one-pager must be DENSE. Fill the sheet to about 0.4" from the bottom. A short resume is a failed draft. 45 lines is fine if they fill the page. Empty space under skills is a failure.
+The one-pager must be DENSE. A short resume is a failed draft. 45 lines is fine if they fill the page. More than about an inch of empty space under the skills is a failure.
 
 Default packed page:
 - profile: 2-3 sentences wrapping to 4-5 lines. Not 5+ sentences. Implied first person (no "I"). Last sentence can hook the employer.

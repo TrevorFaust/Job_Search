@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition, type CSSProperties } from '
 import type { ResumeDraft, ResumeJob, ResumeProject, ResumeSkillGroup } from '@/lib/resume-template';
 import {
   BOTTOM_MARGIN,
+  FULL_PAGE_SLACK_LINES,
   LINE_HEIGHT,
   SECTION_TITLES,
   TOP_NAME_Y,
@@ -168,7 +169,7 @@ export function ResumePreview({ draft, onChange, saving, saved, readOnly = false
           <p className="rounded-md border border-amber-700/60 bg-amber-950/40 px-2.5 py-1 text-amber-200">
             About {overflowLines} line{overflowLines === 1 ? '' : 's'} over one page — shorten a wrapping bullet or hit Trim to one page.
           </p>
-        ) : emptyLines > 3 ? (
+        ) : emptyLines > FULL_PAGE_SLACK_LINES ? (
           <p className="rounded-md border border-amber-800/50 bg-amber-950/20 px-2.5 py-1 text-amber-200/90">
             About {emptyLines} lines of room left on the printed page. Add a bullet below if you want it fuller.
           </p>
@@ -353,7 +354,7 @@ export function ResumePreview({ draft, onChange, saving, saved, readOnly = false
           + Project
         </button>
       </div>
-      <AddBulletPanel draft={draft} onChange={onChange} hasRoom={emptyLines > 1} />
+      <AddBulletPanel draft={draft} onChange={onChange} hasRoom={emptyLines > FULL_PAGE_SLACK_LINES} />
     </div>
   );
 }

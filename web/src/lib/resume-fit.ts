@@ -1,6 +1,6 @@
 import { applyLockedStructure } from './resume-draft';
 import { measureResumeDraft, wrapBulletText, type ResumeLayoutResult } from './resume-pdf';
-import type { ResumeDraft } from './resume-template';
+import { FULL_PAGE_SLACK_LINES, LINE_HEIGHT, type ResumeDraft } from './resume-template';
 
 const TIGHTEN: [RegExp, string][] = [
   [/\s+in order to\s+/gi, ' to '],
@@ -143,8 +143,8 @@ function shortenProfile(draft: ResumeDraft): boolean {
 }
 
 function slackMessage(layout: ResumeLayoutResult) {
-  const lines = Math.max(0, Math.round(layout.slackPt / 12.9));
-  if (lines <= 1) return 'Already one page.';
+  const lines = Math.max(0, Math.round(layout.slackPt / LINE_HEIGHT));
+  if (lines <= FULL_PAGE_SLACK_LINES) return 'Already one page.';
   return `Already one page with about ${lines} line${lines === 1 ? '' : 's'} of room. Trim only cuts when the PDF would spill onto page 2 — add bullets in the preview to fill it.`;
 }
 
