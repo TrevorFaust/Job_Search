@@ -5,8 +5,18 @@ on:
     # 15:00 UTC = 8:00 AM Pacific (during daylight saving; 7:00 AM in winter).
     # GitHub crons are always UTC, so edit this line to change the send time.
     - cron: '0 15 * * *'
-  # workflow_dispatch lets you trigger a run manually from the Actions tab
+  # workflow_dispatch lets you trigger a run manually from the Actions tab.
+  # recovery=true is set only by the retry job below, so a failure retries once.
   workflow_dispatch:
+    inputs:
+      recovery:
+        description: Automatic one-shot retry after a failed digest
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: write
 
 jobs:
   digest:
@@ -42,3 +52,15 @@ jobs:
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           USAJOBS_API_KEY: ${{ secrets.USAJOBS_API_KEY }}
           USAJOBS_USER_AGENT: ${{ secrets.USAJOBS_USER_AGENT }}
+
+  # A failed digest records itself on the site from src/index.js, then this
+  # job starts one follow-up run. A recovery run that fails does not chain.
+  retry:
+    needs: digest
+    if: failure() && github.event.inputs.recovery != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Retry the digest once
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run "Daily job digest" --ref "${{ github.ref_name }}" -f recovery=true

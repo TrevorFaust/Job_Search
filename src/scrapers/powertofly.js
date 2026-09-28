@@ -4,7 +4,7 @@ import {
   newPage,
   parseRelativePosted,
 } from './playwright/helpers.js';
-import { isJunkDescription, isJunkTitle, stripHtml, truncateDescription } from './utils.js';
+import { isJunkDescription, isJunkTitle, isPublishableJob, stripHtml, truncateDescription } from './utils.js';
 
 export const name = 'powertofly';
 

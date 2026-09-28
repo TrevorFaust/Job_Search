@@ -6,6 +6,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import type { BoardPayload } from '@/lib/board-data';
 import { JobBoard } from './JobBoard';
 import { BoardSkeleton } from './BoardSkeleton';
+import { DigestRunNotice } from './DigestRunNotice';
 
 async function fetchBoard(search: string): Promise<BoardPayload> {
   const qs = search ? `?${search}` : '';
@@ -53,6 +54,7 @@ export function BoardPageClient() {
 
   return (
     <div className={isFetching ? 'opacity-90 transition-opacity' : undefined}>
+      {data.signedIn ? <DigestRunNotice /> : null}
       <JobBoard
         jobs={data.jobs}
         total={data.total}

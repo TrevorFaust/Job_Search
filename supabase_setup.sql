@@ -70,6 +70,23 @@ create table if not exists public.scraper_state (
 
 alter table public.scraper_state enable row level security;
 
+create table if not exists public.digest_runs (
+  id bigint generated always as identity primary key,
+  status text not null check (status in ('running', 'success', 'failed')),
+  error_message text,
+  error_stack text,
+  notices text[] not null default '{}',
+  github_run_url text,
+  started_at timestamptz not null default now(),
+  finished_at timestamptz
+);
+
+create index if not exists digest_runs_id_finished_idx
+  on public.digest_runs (id desc)
+  where status <> 'running';
+
+alter table public.digest_runs enable row level security;
+
 create table if not exists public.subscribers (
   id uuid primary key default gen_random_uuid(),
   email text unique not null,

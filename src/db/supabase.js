@@ -4,6 +4,20 @@ import { mergeJobRecords, isJunkTitle } from '../scrapers/utils.js';
 
 let client;
 
+function formatDbError(error) {
+  if (!error) return 'unknown database error';
+  const parts = [error.message, error.details, error.hint, error.code].filter(
+    (part) => part && String(part).trim()
+  );
+  return parts.join(' — ') || 'database request failed with an empty error (often a statement timeout)';
+}
+
+function githubRunUrl() {
+  const { GITHUB_SERVER_URL: server, GITHUB_REPOSITORY: repo, GITHUB_RUN_ID: runId } = process.env;
+  if (!server || !repo || !runId) return null;
+  return `${server}/${repo}/actions/runs/${runId}`;
+}
+
 export function getDb() {
   if (!client) {
     const url = process.env.SUPABASE_URL;
@@ -56,6 +70,37 @@ export async function recordScrapeAt(at = new Date()) {
     .from('scraper_state')
     .upsert({ key: 'last_scrape_at', value: iso, updated_at: iso }, { onConflict: 'key' });
   if (error) console.warn(`Record last scrape time failed: ${error.message}`);
+}
+
+/** Open a digest_runs row so a crash later can be shown on the site. */
+export async function startDigestRun() {
+  const { data, error } = await getDb()
+    .from('digest_runs')
+    .insert({ status: 'running', github_run_url: githubRunUrl() })
+    .select('id')
+    .single();
+  if (error) {
+    console.warn(`Could not record digest start: ${formatDbError(error)}`);
+    return null;
+  }
+  return data.id;
+}
+
+/** Close the open row, or insert one if the run died before it was opened. */
+export async function recordDigestResult({ id, status, errorMessage, errorStack, notices }) {
+  const row = {
+    status,
+    error_message: errorMessage ?? null,
+    error_stack: errorStack ?? null,
+    notices: notices ?? [],
+    finished_at: new Date().toISOString(),
+    github_run_url: githubRunUrl(),
+  };
+  const query = id
+    ? getDb().from('digest_runs').update(row).eq('id', id)
+    : getDb().from('digest_runs').insert(row);
+  const { error } = await query;
+  if (error) console.warn(`Could not record digest result: ${formatDbError(error)}`);
 }
 
 function applySalaryFields(row) {
@@ -195,11 +240,17 @@ export async function expireOldJobs() {
 export async function pruneBoardIfOverCapacity(maxJobs = BOARD_MAX_JOBS) {
   const db = getDb();
 
+  // Estimated count stays under the API's 8s statement timeout after a large scrape.
+  // An exact count of active jobs was canceled mid-digest on 2026-09-28.
   const { count, error: countErr } = await db
     .from('jobs')
-    .select('*', { count: 'exact', head: true })
+    .select('id', { count: 'estimated', head: true })
     .eq('status', 'active');
-  if (countErr) throw new Error(`Count jobs failed: ${countErr.message}`);
+  if (countErr) throw new Error(`Count jobs failed: ${formatDbError(countErr)}`);
+  if (count == null) {
+    console.warn('Active job count unavailable; skipping board prune');
+    return;
+  }
 
   let excess = (count ?? 0) - maxJobs;
   if (excess <= 0) return;

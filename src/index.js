@@ -10,6 +10,8 @@ import {
   getActiveProfiles,
   getLastScrapeAt,
   recordScrapeAt,
+  startDigestRun,
+  recordDigestResult,
   upsertProfileMatch,
   getUnsentMatchesForProfiles,
   markMatchesEmailed,
@@ -86,6 +88,7 @@ async function resolveMaxJobAgeDays() {
 async function scrapeAll(maxJobAgeDays) {
   const scrapers = ALL_SCRAPERS.filter((s) => config.sources[s.name]);
   const allJobs = [];
+  const failures = [];
 
   for (const scraper of scrapers) {
     try {
@@ -105,13 +108,19 @@ async function scrapeAll(maxJobAgeDays) {
       );
       allJobs.push(...fresh);
     } catch (err) {
-      console.error(`  [${scraper.name}] FAILED: ${err.message}`);
+      const message = `[${scraper.name}] ${err.message}`;
+      console.error(`  ${message}`);
+      failures.push(message);
     }
   }
-  return allJobs;
+  return { jobs: allJobs, failures };
 }
 
+let digestRunId = null;
+
 async function main() {
+  if (!DRY_RUN) digestRunId = await startDigestRun();
+
   await expireOldJobs();
 
   let profiles = await getActiveProfiles();
@@ -129,7 +138,7 @@ async function main() {
   console.log(`Running ${ALL_SCRAPERS.filter((s) => config.sources[s.name]).length} scrapers`);
   console.log('Sources return mixed-age catalogs — only the age window is saved. Filter on the board.\n');
 
-  const scraped = await scrapeAll(maxJobAgeDays);
+  const { jobs: scraped, failures } = await scrapeAll(maxJobAgeDays);
   console.log(`\n${scraped.length} total jobs scraped`);
 
   if (DRY_RUN) {
@@ -178,7 +187,13 @@ async function main() {
     }
   }
 
-  await pruneBoardIfOverCapacity();
+  try {
+    await pruneBoardIfOverCapacity();
+  } catch (err) {
+    const message = `Board prune skipped: ${err.message}`;
+    console.error(message);
+    failures.push(message);
+  }
 
   for (const profile of profiles) {
     let matched = 0;
@@ -237,9 +252,28 @@ async function main() {
   if (!bySubscriber.size) {
     console.log('No profiles due for digest today.');
   }
+
+  if (!DRY_RUN) {
+    await recordDigestResult({ id: digestRunId, status: 'success', notices: failures });
+  }
+  if (failures.length) {
+    console.warn(`Digest finished with ${failures.length} problem(s). They are on the site.`);
+  }
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error('Run failed:', err);
+  if (!DRY_RUN) {
+    try {
+      await recordDigestResult({
+        id: digestRunId,
+        status: 'failed',
+        errorMessage: err?.message || String(err),
+        errorStack: err?.stack || null,
+      });
+    } catch (recordErr) {
+      console.error('Could not save digest failure:', recordErr);
+    }
+  }
   process.exit(1);
 });
