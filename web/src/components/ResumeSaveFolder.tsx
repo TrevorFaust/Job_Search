@@ -22,7 +22,7 @@ export function ResumeSaveFolder() {
 
   if (!supported) {
     return (
-      <p className="text-xs text-zinc-600">
+      <p className="text-xs text-ink-faint">
         Chrome or Edge can save straight into a folder you pick. This browser will use Downloads.
       </p>
     );
@@ -46,11 +46,11 @@ export function ResumeSaveFolder() {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-faint">
       <span>
         {folderName ? (
           <>
-            Saving to <span className="text-zinc-300">{folderName}</span>
+            Saving to <span className="text-ink-soft">{folderName}</span>
           </>
         ) : (
           'Downloads folder (browser default)'
@@ -60,12 +60,12 @@ export function ResumeSaveFolder() {
         type="button"
         onClick={chooseFolder}
         disabled={busy}
-        className="text-amber-400/90 hover:text-amber-300 disabled:opacity-50"
+        className="text-brand hover:text-brand disabled:opacity-50"
       >
         {folderName ? 'Change folder' : 'Choose folder'}
       </button>
       {folderName ? (
-        <button type="button" onClick={clearFolder} className="text-zinc-500 hover:text-zinc-300">
+        <button type="button" onClick={clearFolder} className="text-ink-faint hover:text-ink">
           Use Downloads
         </button>
       ) : null}

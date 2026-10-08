@@ -44,7 +44,7 @@ export function BoardPageClient() {
 
   if (isError || !data) {
     return (
-      <p className="rounded-xl border border-red-900/50 bg-red-950/30 p-6 text-sm text-red-300">
+      <p className="rounded-xl border border-red-200 bg-red-50 p-6 text-sm text-red-800">
         {error instanceof Error && error.message !== 'SIGN_IN_REQUIRED'
           ? error.message
           : 'Could not load the job board. Try refreshing the page.'}

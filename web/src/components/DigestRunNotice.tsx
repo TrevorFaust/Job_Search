@@ -41,17 +41,17 @@ export function DigestRunNotice() {
     <div
       className={
         failed
-          ? 'mb-6 rounded-xl border border-red-900/50 bg-red-950/30 p-4 text-sm text-red-100'
-          : 'mb-6 rounded-xl border border-amber-500/30 bg-amber-950/20 p-4 text-sm text-amber-50'
+          ? 'mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900'
+          : 'mb-6 rounded-xl border border-brand/30 bg-brand/10 p-4 text-sm text-ink'
       }
     >
       <p className="font-medium">
         {failed ? 'Daily digest failed' : 'Daily digest finished with source problems'}
-        {when ? <span className="font-normal text-zinc-400"> · {when}</span> : null}
+        {when ? <span className="font-normal text-ink-soft"> · {when}</span> : null}
       </p>
-      <p className="mt-1 whitespace-pre-wrap text-zinc-300">{notice.summary}</p>
+      <p className="mt-1 whitespace-pre-wrap text-ink-soft">{notice.summary}</p>
       {notice.runUrl ? (
-        <a href={notice.runUrl} className="mt-2 inline-block text-amber-300 hover:text-amber-200">
+        <a href={notice.runUrl} className="mt-2 inline-block text-brand hover:text-brand">
           GitHub run
         </a>
       ) : null}

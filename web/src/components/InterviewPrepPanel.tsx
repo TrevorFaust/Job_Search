@@ -55,8 +55,8 @@ const CATEGORY_LABELS: Record<InterviewQuestionCategory, string> = {
 const CATEGORY_STYLES: Record<InterviewQuestionCategory, string> = {
   behavioral: 'bg-violet-400/10 text-violet-300',
   technical: 'bg-sky-400/10 text-sky-300',
-  role_specific: 'bg-amber-400/10 text-amber-300',
-  situational: 'bg-emerald-400/10 text-emerald-300',
+  role_specific: 'bg-brand/10 text-brand',
+  situational: 'bg-emerald-50 text-emerald-800',
 };
 
 function formatGeneratedAt(iso: string) {
@@ -180,11 +180,11 @@ export function InterviewPrepExpanded({ variant = 'default' }: { variant?: Trigg
       className={
         isSidebar
           ? 'mt-4'
-          : 'mt-6 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5'
+          : 'mt-6 rounded-xl border border-line bg-paper p-5'
       }
     >
       {!isSidebar && (
-        <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
+        <h2 className="text-sm font-medium uppercase tracking-wide text-ink-faint">
           Interview prep
         </h2>
       )}
@@ -203,28 +203,28 @@ export function InterviewPrepExpanded({ variant = 'default' }: { variant?: Trigg
             <button
               type="button"
               onClick={() => setExpanded(false)}
-              className="text-xs text-zinc-500 hover:text-zinc-300"
+              className="text-xs text-ink-faint hover:text-ink"
             >
               Collapse
             </button>
             {prep && (
-              <span className="text-xs text-zinc-500">
+              <span className="text-xs text-ink-faint">
                 Generated {formatGeneratedAt(prep.generated_at)}
               </span>
             )}
           </div>
 
           {pending && !prep && (
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-ink-faint">
               Building questions from your resume and this role — usually 15–30 seconds.
             </p>
           )}
 
-          {error && <p className="text-sm text-red-400">{error}</p>}
+          {error && <p className="text-sm text-red-700">{error}</p>}
 
           {prep && (
             <>
-              <p className="text-sm leading-relaxed text-zinc-300">{prep.overview}</p>
+              <p className="text-sm leading-relaxed text-ink-soft">{prep.overview}</p>
 
               <div className="space-y-2">
                 {prep.questions.map((q) => {
@@ -232,61 +232,61 @@ export function InterviewPrepExpanded({ variant = 'default' }: { variant?: Trigg
                   return (
                     <div
                       key={q.id}
-                      className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/50"
+                      className="overflow-hidden rounded-lg border border-line bg-sheet"
                     >
                       <button
                         type="button"
                         onClick={() => setOpenQuestion(isOpen ? null : q.id)}
-                        className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-zinc-900/80"
+                        className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-deep/70"
                       >
                         <span
-                          className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${CATEGORY_STYLES[q.category] ?? 'bg-zinc-800 text-zinc-400'}`}
+                          className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${CATEGORY_STYLES[q.category] ?? 'bg-deep text-ink-soft'}`}
                         >
                           {CATEGORY_LABELS[q.category] ?? q.category}
                         </span>
-                        <span className="min-w-0 flex-1 text-sm font-medium text-zinc-100">
+                        <span className="min-w-0 flex-1 text-sm font-medium text-ink">
                           {q.question}
                         </span>
-                        <span className="shrink-0 text-xs text-zinc-500">{isOpen ? '−' : '+'}</span>
+                        <span className="shrink-0 text-xs text-ink-faint">{isOpen ? '−' : '+'}</span>
                       </button>
 
                       {isOpen && (
-                        <div className="space-y-3 border-t border-zinc-800 px-4 py-3 text-sm">
+                        <div className="space-y-3 border-t border-line px-4 py-3 text-sm">
                           <div>
-                            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                            <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">
                               Why they might ask
                             </p>
-                            <p className="mt-1 text-zinc-400">{q.why_they_ask}</p>
+                            <p className="mt-1 text-ink-soft">{q.why_they_ask}</p>
                           </div>
                           <div>
-                            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                            <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">
                               How to frame it
                             </p>
-                            <p className="mt-1 text-zinc-400">{q.framing_tips}</p>
+                            <p className="mt-1 text-ink-soft">{q.framing_tips}</p>
                           </div>
                           {(q.strength_to_highlight || q.weakness_to_address) && (
                             <div className="flex flex-wrap gap-3">
                               {q.strength_to_highlight && (
-                                <div className="min-w-[12rem] flex-1 rounded-lg bg-emerald-400/5 px-3 py-2">
-                                  <p className="text-xs font-medium text-emerald-400/90">
+                                <div className="min-w-[12rem] flex-1 rounded-lg bg-emerald-50 px-3 py-2">
+                                  <p className="text-xs font-medium text-emerald-800">
                                     Strength to highlight
                                   </p>
-                                  <p className="mt-1 text-zinc-400">{q.strength_to_highlight}</p>
+                                  <p className="mt-1 text-ink-soft">{q.strength_to_highlight}</p>
                                 </div>
                               )}
                               {q.weakness_to_address && (
-                                <div className="min-w-[12rem] flex-1 rounded-lg bg-amber-400/5 px-3 py-2">
-                                  <p className="text-xs font-medium text-amber-400/90">Gap to address</p>
-                                  <p className="mt-1 text-zinc-400">{q.weakness_to_address}</p>
+                                <div className="min-w-[12rem] flex-1 rounded-lg bg-brand/5 px-3 py-2">
+                                  <p className="text-xs font-medium text-brand">Gap to address</p>
+                                  <p className="mt-1 text-ink-soft">{q.weakness_to_address}</p>
                                 </div>
                               )}
                             </div>
                           )}
                           <div>
-                            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                            <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">
                               Sample answer
                             </p>
-                            <p className="mt-1 leading-relaxed text-zinc-300">{q.sample_answer}</p>
+                            <p className="mt-1 leading-relaxed text-ink-soft">{q.sample_answer}</p>
                           </div>
                         </div>
                       )}
@@ -318,8 +318,8 @@ export function InterviewPrepPanel({
 }: PanelProps) {
   return (
     <InterviewPrepProvider jobId={jobId} manualJobId={manualJobId} initialPrep={initialPrep}>
-      <div className="mt-6 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
-        <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
+      <div className="mt-6 rounded-xl border border-line bg-paper p-5">
+        <h2 className="text-sm font-medium uppercase tracking-wide text-ink-faint">
           Interview prep
         </h2>
         <div className="mt-4">

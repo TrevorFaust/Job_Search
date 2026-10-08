@@ -58,7 +58,7 @@ function AutoTextarea({
       rows={1}
       onChange={(e) => onChange(e.target.value)}
       style={style}
-      className={`block w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-inherit outline-none ring-0 placeholder:text-neutral-400 focus:bg-amber-50/60 ${className ?? ''}`}
+      className={`block w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-inherit outline-none ring-0 placeholder:text-neutral-400 focus:bg-brand/5 ${className ?? ''}`}
     />
   );
 }
@@ -84,13 +84,13 @@ export function CoverLetterPreview({
     <div className="space-y-3">
       {!readOnly && (
       <div className="flex flex-wrap items-center gap-3 text-xs">
-        {saving && <span className="text-zinc-500">Saving…</span>}
-        {saved && !saving && <span className="text-emerald-400/80">Saved</span>}
-        <span className="text-zinc-600">Header and date stay locked. Click any paragraph, including the name under Sincerely, to edit.</span>
+        {saving && <span className="text-ink-faint">Saving…</span>}
+        {saved && !saving && <span className="text-emerald-800">Saved</span>}
+        <span className="text-ink-faint">Header and date stay locked. Click any paragraph, including the name under Sincerely, to edit.</span>
       </div>
       )}
 
-      <div className={`rounded-lg border border-zinc-700 bg-zinc-950 p-3 ${readOnly ? 'overflow-visible' : 'overflow-x-auto'}`}>
+      <div className={`rounded-2xl border border-line bg-deep/55 p-4 ${readOnly ? 'overflow-visible' : 'overflow-x-auto'}`}>
         <div
           className="mx-auto bg-white text-black shadow-xl"
           style={{

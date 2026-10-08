@@ -90,9 +90,9 @@ const CHANNEL_LABELS: Record<FollowUpContactChannel, string> = {
 };
 
 const CONFIDENCE_STYLES = {
-  high: 'bg-emerald-400/10 text-emerald-300',
-  medium: 'bg-amber-400/10 text-amber-300',
-  low: 'bg-zinc-700/50 text-zinc-400',
+  high: 'bg-emerald-50 text-emerald-800',
+  medium: 'bg-brand/10 text-brand',
+  low: 'bg-deep text-ink-soft',
 } as const;
 
 function formatGeneratedAt(iso: string) {
@@ -129,7 +129,7 @@ function CopyButton({ text, label }: { text: string; label: string }) {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       }}
-      className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs font-medium text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
+      className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink-soft hover:border-ink/30 hover:text-ink"
     >
       {copied ? 'Copied!' : label}
     </button>
@@ -160,7 +160,7 @@ function AddContactForm() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-lg border border-dashed border-zinc-600 px-4 py-2 text-sm font-medium text-zinc-300 hover:border-zinc-500 hover:text-zinc-100"
+        className="rounded-lg border border-dashed border-line px-4 py-2 text-sm font-medium text-ink-soft hover:border-ink/25 hover:text-ink"
       >
         + Add contact manually
       </button>
@@ -168,9 +168,9 @@ function AddContactForm() {
   }
 
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Add a contact</p>
-      <p className="mt-1 text-xs text-zinc-500">
+    <div className="rounded-lg border border-line bg-sheet p-4">
+      <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Add a contact</p>
+      <p className="mt-1 text-xs text-ink-faint">
         Paste someone you found on LinkedIn. At least a profile URL or email is required.
       </p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -179,33 +179,33 @@ function AddContactForm() {
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Name"
-          className="rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600"
+          className="rounded-md border border-line bg-sheet px-3 py-2 text-sm text-ink placeholder:text-ink-faint"
         />
         <input
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Title (e.g. Software Engineer at BDGE)"
-          className="rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600"
+          className="rounded-md border border-line bg-sheet px-3 py-2 text-sm text-ink placeholder:text-ink-faint"
         />
         <input
           type="url"
           value={linkedinUrl}
           onChange={(e) => setLinkedinUrl(e.target.value)}
           placeholder="LinkedIn URL"
-          className="rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 sm:col-span-2"
+          className="rounded-md border border-line bg-sheet px-3 py-2 text-sm text-ink placeholder:text-ink-faint sm:col-span-2"
         />
         <input
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="Email (optional)"
-          className="rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600"
+          className="rounded-md border border-line bg-sheet px-3 py-2 text-sm text-ink placeholder:text-ink-faint"
         />
         <select
           value={roleType}
           onChange={(e) => setRoleType(e.target.value as FollowUpContactRole)}
-          className="rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200"
+          className="rounded-md border border-line bg-sheet px-3 py-2 text-sm text-ink"
         >
           {Object.entries(ROLE_LABELS).map(([value, label]) => (
             <option key={value} value={value}>
@@ -218,7 +218,7 @@ function AddContactForm() {
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Optional note — why reach out to them?"
           rows={2}
-          className="rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 sm:col-span-2"
+          className="rounded-md border border-line bg-sheet px-3 py-2 text-sm text-ink placeholder:text-ink-faint sm:col-span-2"
         />
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
@@ -247,7 +247,7 @@ function AddContactForm() {
             reset();
             setOpen(false);
           }}
-          className="text-sm text-zinc-500 hover:text-zinc-300"
+          className="text-sm text-ink-faint hover:text-ink"
         >
           Cancel
         </button>
@@ -285,11 +285,11 @@ function ContactOutreachSection({ contact }: { contact: FollowUpContact }) {
 
   if (!hasMessages && mode === 'view') {
     return (
-      <div className="mt-3 border-t border-zinc-800 pt-3">
+      <div className="mt-3 border-t border-line pt-3">
         <button
           type="button"
           onClick={() => setMode('draft')}
-          className="text-xs font-medium text-amber-400 hover:text-amber-300"
+          className="text-xs font-medium text-brand hover:text-brand"
         >
           Draft a message
         </button>
@@ -299,10 +299,10 @@ function ContactOutreachSection({ contact }: { contact: FollowUpContact }) {
 
   if (mode === 'edit') {
     return (
-      <div className="mt-3 space-y-3 border-t border-zinc-800 pt-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Edit outreach</p>
+      <div className="mt-3 space-y-3 border-t border-line pt-3">
+        <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Edit outreach</p>
         <div>
-          <label className="mb-1 block text-xs text-zinc-500" htmlFor={`edit-note-${contact.id}`}>
+          <label className="mb-1 block text-xs text-ink-faint" htmlFor={`edit-note-${contact.id}`}>
             Connection note
           </label>
           <textarea
@@ -310,11 +310,11 @@ function ContactOutreachSection({ contact }: { contact: FollowUpContact }) {
             value={connectionNote}
             onChange={(e) => setConnectionNote(e.target.value)}
             rows={3}
-            className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200"
+            className="w-full rounded-md border border-line bg-sheet px-3 py-2 text-sm text-ink"
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs text-zinc-500" htmlFor={`edit-msg-${contact.id}`}>
+          <label className="mb-1 block text-xs text-ink-faint" htmlFor={`edit-msg-${contact.id}`}>
             Follow-up message
           </label>
           <textarea
@@ -322,7 +322,7 @@ function ContactOutreachSection({ contact }: { contact: FollowUpContact }) {
             value={followUpMessage}
             onChange={(e) => setFollowUpMessage(e.target.value)}
             rows={5}
-            className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200"
+            className="w-full rounded-md border border-line bg-sheet px-3 py-2 text-sm text-ink"
           />
         </div>
         <div className="flex flex-wrap gap-2">
@@ -341,7 +341,7 @@ function ContactOutreachSection({ contact }: { contact: FollowUpContact }) {
           >
             {savingContactId === contact.id ? 'Saving…' : 'Save changes'}
           </button>
-          <button type="button" onClick={closeMode} className="text-xs text-zinc-500 hover:text-zinc-300">
+          <button type="button" onClick={closeMode} className="text-xs text-ink-faint hover:text-ink">
             Cancel
           </button>
         </div>
@@ -351,8 +351,8 @@ function ContactOutreachSection({ contact }: { contact: FollowUpContact }) {
 
   if (mode === 'draft' || mode === 'refine') {
     return (
-      <div className="mt-3 space-y-2 border-t border-zinc-800 pt-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+      <div className="mt-3 space-y-2 border-t border-line pt-3">
+        <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">
           {mode === 'refine' ? 'Refine with AI' : 'Draft a message'}
         </p>
         <textarea
@@ -364,7 +364,7 @@ function ContactOutreachSection({ contact }: { contact: FollowUpContact }) {
               : 'e.g. We both went to Penn State, or I saw their post about fantasy football UX…'
           }
           rows={3}
-          className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600"
+          className="w-full rounded-md border border-line bg-sheet px-3 py-2 text-sm text-ink placeholder:text-ink-faint"
         />
         <div className="flex flex-wrap gap-2">
           <button
@@ -381,7 +381,7 @@ function ContactOutreachSection({ contact }: { contact: FollowUpContact }) {
               setMode('view');
               setPromptText('');
             }}
-            className="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-medium text-zinc-950 hover:bg-amber-400 disabled:opacity-50"
+            className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-paper hover:bg-brand-soft disabled:opacity-50"
           >
             {draftingContactId === contact.id
               ? mode === 'refine'
@@ -391,7 +391,7 @@ function ContactOutreachSection({ contact }: { contact: FollowUpContact }) {
                 ? 'Apply suggestions'
                 : 'Generate message'}
           </button>
-          <button type="button" onClick={closeMode} className="text-xs text-zinc-500 hover:text-zinc-300">
+          <button type="button" onClick={closeMode} className="text-xs text-ink-faint hover:text-ink">
             Cancel
           </button>
         </div>
@@ -400,9 +400,9 @@ function ContactOutreachSection({ contact }: { contact: FollowUpContact }) {
   }
 
   return (
-    <div className="mt-3 space-y-3 border-t border-zinc-800 pt-3">
+    <div className="mt-3 space-y-3 border-t border-line pt-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Outreach for {contact.name.split(' ')[0]}</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Outreach for {contact.name.split(' ')[0]}</p>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -410,14 +410,14 @@ function ContactOutreachSection({ contact }: { contact: FollowUpContact }) {
               syncFromContact();
               setMode('edit');
             }}
-            className="text-xs text-zinc-400 hover:text-zinc-200"
+            className="text-xs text-ink-soft hover:text-ink"
           >
             Edit
           </button>
           <button
             type="button"
             onClick={() => setMode('refine')}
-            className="text-xs text-amber-400/90 hover:text-amber-300"
+            className="text-xs text-brand hover:text-brand"
           >
             Refine with AI
           </button>
@@ -425,22 +425,22 @@ function ContactOutreachSection({ contact }: { contact: FollowUpContact }) {
       </div>
 
       {contact.connection_note?.trim() && (
-        <div className="rounded-md border border-zinc-800 bg-zinc-900/40 p-3">
+        <div className="rounded-md border border-line bg-paper p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Connection note</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Connection note</p>
             <CopyButton text={contact.connection_note} label="Copy note" />
           </div>
-          <p className="mt-1 text-sm leading-relaxed text-zinc-300">{contact.connection_note}</p>
+          <p className="mt-1 text-sm leading-relaxed text-ink-soft">{contact.connection_note}</p>
         </div>
       )}
 
       {contact.follow_up_message?.trim() && (
-        <div className="rounded-md border border-zinc-800 bg-zinc-900/40 p-3">
+        <div className="rounded-md border border-line bg-paper p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Follow-up message</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Follow-up message</p>
             <CopyButton text={contact.follow_up_message} label="Copy message" />
           </div>
-          <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-zinc-300">
+          <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-ink-soft">
             {contact.follow_up_message}
           </p>
         </div>
@@ -484,17 +484,17 @@ function ContactCard({
   return (
     <div
       className={`rounded-lg border p-4 ${
-        followedUp ? 'border-emerald-500/30 bg-emerald-950/20' : 'border-zinc-800 bg-zinc-950/50'
+        followedUp ? 'border-emerald-200 bg-emerald-50' : 'border-line bg-sheet'
       }`}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="font-medium text-zinc-100">{contact.name}</p>
-          <p className="mt-0.5 text-sm text-zinc-400">{contact.title}</p>
+          <p className="font-medium text-ink">{contact.name}</p>
+          <p className="mt-0.5 text-sm text-ink-soft">{contact.title}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {isManual && (
-            <span className="rounded-full bg-zinc-700/60 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-300">
+            <span className="rounded-full bg-deep px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-ink-soft">
               Added by you
             </span>
           )}
@@ -512,17 +512,17 @@ function ContactCard({
             {contact.confidence}
           </span>
           {followedUp && (
-            <span className="rounded-full bg-emerald-400/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-300">
+            <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-800">
               Followed up
             </span>
           )}
         </div>
       </div>
 
-      <p className="mt-2 text-sm leading-relaxed text-zinc-400">{contact.rationale}</p>
+      <p className="mt-2 text-sm leading-relaxed text-ink-soft">{contact.rationale}</p>
 
       {contact.company_evidence && verifiedAtCompany && (
-        <p className="mt-2 text-xs italic text-zinc-500">
+        <p className="mt-2 text-xs italic text-ink-faint">
           &ldquo;{contact.company_evidence}&rdquo;
         </p>
       )}
@@ -539,24 +539,24 @@ function ContactCard({
       )}
 
       {contact.email && (
-        <div className="mt-3 rounded-md border border-zinc-800 bg-zinc-900/60 px-3 py-2">
+        <div className="mt-3 rounded-md border border-line bg-paper px-3 py-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+            <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">
               Suggested email
               {contact.email_confidence && (
-                <span className="ml-2 normal-case text-zinc-600">
+                <span className="ml-2 normal-case text-ink-faint">
                   ({contact.email_confidence} confidence)
                 </span>
               )}
             </p>
             <CopyButton text={contact.email} label="Copy email" />
           </div>
-          <p className="mt-1 font-mono text-sm text-zinc-200">{contact.email}</p>
+          <p className="mt-1 font-mono text-sm text-ink">{contact.email}</p>
           {contact.email_pattern_note && (
-            <p className="mt-1 text-xs text-zinc-500">{contact.email_pattern_note}</p>
+            <p className="mt-1 text-xs text-ink-faint">{contact.email_pattern_note}</p>
           )}
           {contact.email_confidence === 'low' && (
-            <p className="mt-1 text-xs text-amber-400/90">
+            <p className="mt-1 text-xs text-brand">
               Verify before sending — pattern not fully confirmed.
             </p>
           )}
@@ -569,25 +569,25 @@ function ContactCard({
         <button
           type="button"
           onClick={() => removeManualContact(contact.id!)}
-          className="mt-2 text-xs text-red-400/80 hover:text-red-300"
+          className="mt-2 text-xs text-red-700 hover:text-red-800"
         >
           Remove contact
         </button>
       )}
 
       {followedUp ? (
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-emerald-300/90">
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-emerald-800">
           <span>
             Followed up via {CHANNEL_LABELS[contact.follow_up_channel ?? 'other']} on{' '}
             {formatFollowUpDate(contact.followed_up_at!)}
           </span>
           {contact.follow_up_notes && (
-            <span className="text-zinc-500">— {contact.follow_up_notes}</span>
+            <span className="text-ink-faint">— {contact.follow_up_notes}</span>
           )}
           <button
             type="button"
             onClick={() => contact.id && clearReachedOut(contact.id)}
-            className="text-zinc-500 hover:text-zinc-300"
+            className="text-ink-faint hover:text-ink"
           >
             Undo
           </button>
@@ -598,21 +598,21 @@ function ContactCard({
             <button
               type="button"
               onClick={() => setShowMarkForm(true)}
-              className="text-xs font-medium text-emerald-400 hover:text-emerald-300"
+              className="text-xs font-medium text-emerald-800 hover:text-emerald-800"
             >
               Mark as followed up
             </button>
           ) : (
-            <div className="space-y-2 rounded-md border border-zinc-800 bg-zinc-900/40 p-3">
+            <div className="space-y-2 rounded-md border border-line bg-paper p-3">
               <div className="flex flex-wrap items-center gap-2">
-                <label className="text-xs text-zinc-500" htmlFor={`channel-${contact.id}`}>
+                <label className="text-xs text-ink-faint" htmlFor={`channel-${contact.id}`}>
                   Via
                 </label>
                 <select
                   id={`channel-${contact.id}`}
                   value={channel}
                   onChange={(e) => setChannel(e.target.value as FollowUpContactChannel)}
-                  className="rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-200"
+                  className="rounded-md border border-line bg-sheet px-2 py-1 text-xs text-ink"
                 >
                   <option value="linkedin">LinkedIn</option>
                   <option value="email">Email</option>
@@ -624,7 +624,7 @@ function ContactCard({
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Optional note (e.g. sent connection request)"
-                className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-600"
+                className="w-full rounded-md border border-line bg-sheet px-2 py-1.5 text-xs text-ink placeholder:text-ink-faint"
               />
               <div className="flex flex-wrap gap-2">
                 <button
@@ -643,7 +643,7 @@ function ContactCard({
                 <button
                   type="button"
                   onClick={() => setShowMarkForm(false)}
-                  className="text-xs text-zinc-500 hover:text-zinc-300"
+                  className="text-xs text-ink-faint hover:text-ink"
                 >
                   Cancel
                 </button>
@@ -932,9 +932,9 @@ export function FollowUpContactsExpanded({ variant = 'default' }: { variant?: Tr
     contacts.contacts.every((c) => c.followed_up_at);
 
   return (
-    <div className={isSidebar ? 'mt-4' : 'mt-6 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5'}>
+    <div className={isSidebar ? 'mt-4' : 'mt-6 rounded-xl border border-line bg-paper p-5'}>
       {!isSidebar && (
-        <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
+        <h2 className="text-sm font-medium uppercase tracking-wide text-ink-faint">
           Follow-up contacts
         </h2>
       )}
@@ -959,11 +959,11 @@ export function FollowUpContactsExpanded({ variant = 'default' }: { variant?: Tr
                   (contacts.contacts.length >= MAX_FOLLOW_UP_CONTACTS &&
                     !(contacts.contact_pool?.length ?? 0))
                 }
-                className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 hover:border-zinc-600 disabled:opacity-50"
+                className="rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink-soft hover:border-ink/30 disabled:opacity-50"
               >
                 Find more contacts
                 {(contacts.contact_pool?.length ?? 0) > 0 ? (
-                  <span className="ml-1 text-zinc-500">
+                  <span className="ml-1 text-ink-faint">
                     ({contacts.contact_pool!.length} ready)
                   </span>
                 ) : null}
@@ -972,19 +972,19 @@ export function FollowUpContactsExpanded({ variant = 'default' }: { variant?: Tr
             <button
               type="button"
               onClick={() => setExpanded(false)}
-              className="text-xs text-zinc-500 hover:text-zinc-300"
+              className="text-xs text-ink-faint hover:text-ink"
             >
               Collapse
             </button>
             {contacts && (
-              <span className="text-xs text-zinc-500">
+              <span className="text-xs text-ink-faint">
                 Generated {formatGeneratedAt(contacts.generated_at)}
               </span>
             )}
           </div>
 
           {contacts && (
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-ink-faint">
               Shows up to 5 priority contacts first (recruiters and hiring managers). Find more
               reveals the next batch — teammates and secondary connections held until you ask.
               Regenerate replaces auto-discovered contacts; manual contacts are kept.
@@ -992,13 +992,13 @@ export function FollowUpContactsExpanded({ variant = 'default' }: { variant?: Tr
           )}
 
           {pending && !contacts && (
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-ink-faint">
               Searching for recruiters, hiring managers, and email patterns — usually 20–40 seconds.
             </p>
           )}
 
-          {error && <p className="text-sm text-red-400">{error}</p>}
-          {info && <p className="text-sm text-amber-300/90">{info}</p>}
+          {error && <p className="text-sm text-red-700">{error}</p>}
+          {info && <p className="text-sm text-brand">{info}</p>}
 
           {contacts && contacts.contacts.length > 0 && (
             <>
@@ -1010,13 +1010,13 @@ export function FollowUpContactsExpanded({ variant = 'default' }: { variant?: Tr
               ) : null}
 
               {allFollowedUp ? (
-                <p className="rounded-lg border border-emerald-500/30 bg-emerald-950/20 px-3 py-2 text-sm text-emerald-300">
+                <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
                   You&apos;ve followed up with everyone recommended for this role.
                 </p>
               ) : null}
 
               {contacts.overview?.trim() ? (
-                <p className="text-sm leading-relaxed text-zinc-300">{contacts.overview}</p>
+                <p className="text-sm leading-relaxed text-ink-soft">{contacts.overview}</p>
               ) : null}
 
               {(() => {
@@ -1024,7 +1024,7 @@ export function FollowUpContactsExpanded({ variant = 'default' }: { variant?: Tr
                 const pattern = sanitizeFollowUpEmailField(contacts.email_pattern);
                 if (!domain && !pattern) return null;
                 return (
-                  <p className="text-xs text-zinc-500">
+                  <p className="text-xs text-ink-faint">
                     {pattern && domain
                       ? `Company email pattern: ${pattern}@${domain}`
                       : domain
@@ -1035,7 +1035,7 @@ export function FollowUpContactsExpanded({ variant = 'default' }: { variant?: Tr
               })()}
 
               <div className="space-y-3">
-                <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">
                   Who to reach out to
                 </p>
                 {contacts.contacts.map((contact) => (
@@ -1049,7 +1049,7 @@ export function FollowUpContactsExpanded({ variant = 'default' }: { variant?: Tr
             </>
           )}
 
-          <div className="border-t border-zinc-800 pt-4">
+          <div className="border-t border-line pt-4">
             <AddContactForm />
           </div>
         </div>

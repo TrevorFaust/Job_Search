@@ -12,7 +12,7 @@ export function SiteLogo({ href = '/', size = 96, className = '', priority = fal
   return (
     <Link
       href={href}
-      className={`inline-block shrink-0 overflow-hidden rounded-xl ${className}`}
+      className={`inline-block shrink-0 ${className}`}
       aria-label="HustleHunter home"
     >
       <Image

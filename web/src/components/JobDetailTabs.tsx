@@ -96,7 +96,7 @@ export function JobDetailTabs({
 
   return (
     <div className="mt-8">
-      <div className="flex flex-wrap gap-1 border-b border-zinc-800">
+      <div className="flex flex-wrap gap-1 border-b border-line">
         {TABS.map((item) => {
           const badge = tabBadge(item.id, followUpContacts, interviewPrep);
           const disabled =
@@ -110,10 +110,10 @@ export function JobDetailTabs({
               onClick={() => setTab(item.id)}
               className={`relative px-4 py-2.5 text-sm font-medium transition ${
                 tab === item.id
-                  ? 'text-amber-300 after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-amber-400'
+                  ? 'text-brand after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-brand'
                   : disabled
-                    ? 'cursor-not-allowed text-zinc-600'
-                    : 'text-zinc-500 hover:text-zinc-300'
+                    ? 'cursor-not-allowed text-ink-faint'
+                    : 'text-ink-faint hover:text-ink'
               }`}
             >
               {item.label}
@@ -138,7 +138,7 @@ export function JobDetailTabs({
           (description ? (
             <JobDescription description={description} />
           ) : (
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-ink-faint">
               Couldn&apos;t load a description from the original listing.
             </p>
           ))}
@@ -160,21 +160,21 @@ export function JobDetailTabs({
             defaultExpanded
           >
             {followUpSummary ? (
-              <p className="mb-4 text-sm text-zinc-500">{followUpSummary}</p>
+              <p className="mb-4 text-sm text-ink-faint">{followUpSummary}</p>
             ) : null}
             <FollowUpContactsExpanded variant="sidebar" />
           </FollowUpContactsProvider>
         )}
 
         {tab === 'follow-up' && !canFollowUp && (
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-ink-faint">
             Mark this job as applied to find contacts and track follow-ups.
           </p>
         )}
 
         {tab === 'interview' && canInterview && !interviewEnabled && (
-          <p className="text-sm text-zinc-500">
-            Move this application to the <strong className="text-zinc-300">Interviewing</strong>{' '}
+          <p className="text-sm text-ink-faint">
+            Move this application to the <strong className="text-ink-soft">Interviewing</strong>{' '}
             stage to generate interview questions and practice answers.
           </p>
         )}
@@ -199,7 +199,7 @@ export function JobDetailTabs({
         )}
 
         {tab === 'interview' && !canInterview && (
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-ink-faint">
             Mark this job as applied to unlock interview prep.
           </p>
         )}

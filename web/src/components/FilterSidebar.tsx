@@ -19,7 +19,7 @@ type Props = {
 };
 
 const selectClass =
-  'mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100';
+  'mt-1.5 w-full rounded-xl border border-line bg-sheet px-3 py-2.5 text-sm text-ink shadow-sm transition hover:border-brand/40';
 
 export function FilterSidebar({ filters, view, stage, sort, q, preferredCategories }: Props) {
   const recencyValue =
@@ -35,8 +35,11 @@ export function FilterSidebar({ filters, view, stage, sort, q, preferredCategori
         : [];
 
   return (
-    <aside className="space-y-5 rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 lg:sticky lg:top-6 lg:self-start">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">Filters</h2>
+    <aside className="space-y-5 rounded-2xl border border-line border-t-2 border-t-brand bg-sheet p-5 shadow-[0_1px_0_rgb(26_28_24/0.04),0_16px_36px_-24px_rgb(26_28_24/0.45)] lg:sticky lg:top-24 lg:self-start">
+      <h2 className="flex items-center gap-2 text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-brand">
+        <span className="h-px w-5 bg-brand" aria-hidden />
+        Filters
+      </h2>
       <form action="/" method="get" className="space-y-4">
         <input type="hidden" name="view" value={view} />
         {view === 'applied' && stage && <input type="hidden" name="stage" value={stage} />}
@@ -50,7 +53,7 @@ export function FilterSidebar({ filters, view, stage, sort, q, preferredCategori
         )}
 
         <label className="block text-sm">
-          <span className="text-zinc-400">Posted within</span>
+          <span className="text-ink-soft">Posted within</span>
           <select name="recency" defaultValue={recencyValue} className={selectClass}>
             {RECENCY_OPTIONS.map((o) => (
               <option key={o.id || 'any'} value={o.id}>
@@ -61,7 +64,7 @@ export function FilterSidebar({ filters, view, stage, sort, q, preferredCategori
         </label>
 
         <label className="block text-sm">
-          <span className="text-zinc-400">Min salary ($/year)</span>
+          <span className="text-ink-soft">Min salary ($/year)</span>
           <input
             name="min_salary"
             type="number"
@@ -73,31 +76,31 @@ export function FilterSidebar({ filters, view, stage, sort, q, preferredCategori
           />
         </label>
 
-        <label className="flex items-center gap-2 text-sm text-zinc-300">
+        <label className="flex items-center gap-2 text-sm text-ink-soft">
           <input
             type="checkbox"
             name="exclude_no_salary"
             value="1"
             defaultChecked={filters.excludeNoSalary}
-            className="rounded border-zinc-600"
+            className="rounded border-line"
           />
           Exclude jobs without salary
         </label>
 
         <fieldset className="space-y-2">
-          <legend className="text-sm text-zinc-400">Interest areas</legend>
-          <p className="text-xs text-zinc-600">
+          <legend className="text-sm text-ink-soft">Interest areas</legend>
+          <p className="text-xs text-ink-faint">
             Used on the Preferred tab. Your saved defaults live in Profile; these checkboxes narrow this search.
           </p>
-          <div className="max-h-48 space-y-1.5 overflow-y-auto rounded-lg border border-zinc-800 p-2">
+          <div className="max-h-48 space-y-1.5 overflow-y-auto rounded-xl border border-line bg-paper/70 p-2">
             {INTEREST_CATEGORIES.map((cat) => (
-              <label key={cat.id} className="flex items-center gap-2 text-sm text-zinc-300">
+              <label key={cat.id} className="flex items-center gap-2 text-sm text-ink-soft">
                 <input
                   type="checkbox"
                   name="cat"
                   value={cat.id}
                   defaultChecked={activeCategories.includes(cat.id)}
-                  className="rounded border-zinc-600"
+                  className="rounded border-line"
                 />
                 {cat.label}
               </label>
@@ -106,14 +109,14 @@ export function FilterSidebar({ filters, view, stage, sort, q, preferredCategori
         </fieldset>
 
         <div className="space-y-2">
-          <label className="block text-sm text-zinc-400">Location</label>
+          <label className="block text-sm text-ink-soft">Location</label>
           <LocationInput
             key={filters.locations.join('|') || 'no-location'}
             name="location"
             defaultValues={filters.locations}
           />
           <label className="block text-sm">
-            <span className="text-zinc-400">Within (miles)</span>
+            <span className="text-ink-soft">Within (miles)</span>
             <input
               name="radius"
               type="number"
@@ -127,7 +130,7 @@ export function FilterSidebar({ filters, view, stage, sort, q, preferredCategori
         </div>
 
         <label className="block text-sm">
-          <span className="text-zinc-400">Work type</span>
+          <span className="text-ink-soft">Work type</span>
           <select name="work_type" defaultValue={filters.workType ?? ''} className={selectClass}>
             {WORK_TYPE_OPTIONS.map((o) => (
               <option key={o.id || 'any'} value={o.id}>
@@ -140,12 +143,12 @@ export function FilterSidebar({ filters, view, stage, sort, q, preferredCategori
         <div className="flex gap-2 pt-1">
           <button
             type="submit"
-            className="flex-1 rounded-lg bg-amber-400 py-2 text-sm font-semibold text-zinc-950 hover:bg-amber-300"
+            className="flex-1 rounded-full bg-brand py-2.5 text-sm font-semibold text-paper shadow-sm transition hover:bg-brand-soft"
           >
             Apply
           </button>
           <ResetBoardFiltersLink
-            className="flex items-center rounded-lg border border-zinc-700 px-3 text-sm text-zinc-500 hover:text-zinc-300"
+            className="flex items-center rounded-full border border-line px-3.5 text-sm text-ink-faint transition hover:border-ink/25 hover:text-ink"
           >
             Reset
           </ResetBoardFiltersLink>

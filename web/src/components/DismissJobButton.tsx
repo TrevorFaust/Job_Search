@@ -15,7 +15,7 @@ type Props = {
 export function DismissJobButton({
   jobId,
   manualJobId,
-  className = 'text-xs text-zinc-500 hover:text-zinc-300',
+  className = 'text-xs text-ink-faint hover:text-ink',
   label = 'Remove from board',
   redirectTo,
 }: Props) {

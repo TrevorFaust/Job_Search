@@ -71,7 +71,7 @@ function AutoTextarea({
       rows={1}
       onChange={(e) => onChange(e.target.value)}
       style={style}
-      className={`block w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-inherit outline-none ring-0 placeholder:text-neutral-400 focus:bg-amber-50/60 ${center ? 'text-center' : ''} ${className ?? ''}`}
+      className={`block w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-inherit outline-none ring-0 placeholder:text-neutral-400 focus:bg-brand/5 ${center ? 'text-center' : ''} ${className ?? ''}`}
     />
   );
 }
@@ -166,25 +166,25 @@ export function ResumePreview({ draft, onChange, saving, saved, readOnly = false
       {!readOnly && (
       <div className="flex flex-wrap items-center gap-3 text-xs">
         {overflowLines > 0 ? (
-          <p className="rounded-md border border-amber-700/60 bg-amber-950/40 px-2.5 py-1 text-amber-200">
+          <p className="rounded-md border border-brand/40 bg-brand/10 px-2.5 py-1 text-brand">
             About {overflowLines} line{overflowLines === 1 ? '' : 's'} over one page — shorten a wrapping bullet or hit Trim to one page.
           </p>
         ) : emptyLines > FULL_PAGE_SLACK_LINES ? (
-          <p className="rounded-md border border-amber-800/50 bg-amber-950/20 px-2.5 py-1 text-amber-200/90">
+          <p className="rounded-md border border-brand/30 bg-brand/10 px-2.5 py-1 text-brand">
             About {emptyLines} lines of room left on the printed page. Add a bullet below if you want it fuller.
           </p>
         ) : (
-          <p className="rounded-md border border-emerald-800/60 bg-emerald-950/30 px-2.5 py-1 text-emerald-300">
+          <p className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-emerald-800">
             Fits on one page
           </p>
         )}
-        {saving && <span className="text-zinc-500">Saving…</span>}
-        {saved && !saving && <span className="text-emerald-400/80">Saved</span>}
-        <span className="text-zinc-600">Click any text to edit. Header and education start filled in; you can shorten or clear them.</span>
+        {saving && <span className="text-ink-faint">Saving…</span>}
+        {saved && !saving && <span className="text-emerald-800">Saved</span>}
+        <span className="text-ink-faint">Click any text to edit. Header and education start filled in; you can shorten or clear them.</span>
       </div>
       )}
 
-      <div className={`rounded-lg border border-zinc-700 bg-zinc-950 p-3 ${readOnly ? 'overflow-visible' : 'overflow-x-auto'}`}>
+      <div className={`rounded-2xl border border-line bg-deep/55 p-4 ${readOnly ? 'overflow-visible' : 'overflow-x-auto'}`}>
         <div
           ref={sheetRef}
           className="mx-auto bg-white text-black shadow-xl"
@@ -301,7 +301,7 @@ export function ResumePreview({ draft, onChange, saving, saved, readOnly = false
           </div>
         </div>
       </div>
-      <div className="flex flex-wrap gap-2 text-xs text-zinc-500">
+      <div className="flex flex-wrap gap-2 text-xs text-ink-faint">
         <button
           type="button"
           onClick={() =>
@@ -318,7 +318,7 @@ export function ResumePreview({ draft, onChange, saving, saved, readOnly = false
               ],
             })
           }
-          className="hover:text-amber-300"
+          className="hover:text-brand"
         >
           + Employer
         </button>
@@ -337,7 +337,7 @@ export function ResumePreview({ draft, onChange, saving, saved, readOnly = false
               ),
             })
           }
-          className="hover:text-amber-300"
+          className="hover:text-brand"
         >
           + Process Engineer role
         </button>
@@ -349,7 +349,7 @@ export function ResumePreview({ draft, onChange, saving, saved, readOnly = false
               projects: [...draft.projects, { title: 'Project', bullets: [{ text: '' }] }],
             })
           }
-          className="hover:text-amber-300"
+          className="hover:text-brand"
         >
           + Project
         </button>
@@ -535,9 +535,9 @@ function AddBulletPanel({
   if (!targets.length) return null;
 
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
-      <p className="text-xs font-medium text-zinc-300">Add a bullet</p>
-      <p className="mt-1 text-xs text-zinc-500">
+    <div className="rounded-lg border border-line bg-sheet p-3">
+      <p className="text-xs font-medium text-ink-soft">Add a bullet</p>
+      <p className="mt-1 text-xs text-ink-faint">
         {hasRoom
           ? 'There is room on the page. Pick a suggested line, or add a blank one and write your own.'
           : 'You can still add a line. If the page runs long, trim one bullet or shorten a wrapping line.'}
@@ -547,13 +547,13 @@ function AddBulletPanel({
           const suggestions = suggestedBulletsFor(target.label, target.existing);
           const open = openKey === target.key;
           return (
-            <div key={target.key} className="rounded-md border border-zinc-800 px-2.5 py-2">
+            <div key={target.key} className="rounded-md border border-line px-2.5 py-2">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="min-w-0 flex-1 text-xs text-zinc-200">{target.label}</span>
+                <span className="min-w-0 flex-1 text-xs text-ink">{target.label}</span>
                 <button
                   type="button"
                   onClick={() => setOpenKey(open ? null : target.key)}
-                  className="text-xs text-amber-400/90 hover:text-amber-300"
+                  className="text-xs text-brand hover:text-brand"
                 >
                   {open ? 'Hide suggestions' : 'Add bullet'}
                 </button>
@@ -568,7 +568,7 @@ function AddBulletPanel({
                           target.add(text);
                           setOpenKey(null);
                         }}
-                        className="w-full rounded-md border border-zinc-800 bg-zinc-900/80 px-2 py-1.5 text-left text-xs leading-relaxed text-zinc-300 hover:border-amber-500/40 hover:text-zinc-100"
+                        className="w-full rounded-md border border-line bg-paper px-2 py-1.5 text-left text-xs leading-relaxed text-ink-soft hover:border-brand hover:text-ink"
                       >
                         {text}
                       </button>
@@ -581,13 +581,13 @@ function AddBulletPanel({
                         target.add('');
                         setOpenKey(null);
                       }}
-                      className="text-xs text-zinc-500 hover:text-zinc-300"
+                      className="text-xs text-ink-faint hover:text-ink"
                     >
                       Blank bullet, I will write it
                     </button>
                   </li>
                   {suggestions.length === 0 ? (
-                    <li className="text-xs text-zinc-600">No unused suggestions left for this section.</li>
+                    <li className="text-xs text-ink-faint">No unused suggestions left for this section.</li>
                   ) : null}
                 </ul>
               ) : null}

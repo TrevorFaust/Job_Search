@@ -14,7 +14,7 @@ type Props = {
 export function RemoveApplicationButton({
   jobId,
   manualJobId,
-  className = 'text-xs text-zinc-500 hover:text-zinc-300',
+  className = 'text-xs text-ink-faint hover:text-ink',
   label = 'Move back to board',
 }: Props) {
   const [pending, startTransition] = useTransition();

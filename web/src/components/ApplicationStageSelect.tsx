@@ -10,10 +10,10 @@ import {
 } from '@/lib/applications';
 
 const STAGE_STYLES: Record<ApplicationStage, string> = {
-  applied: 'border-zinc-600 bg-zinc-800 text-zinc-200',
-  interviewing: 'border-amber-600/50 bg-amber-950/40 text-amber-200',
-  rejected: 'border-red-800/50 bg-red-950/30 text-red-300',
-  offered: 'border-emerald-700/50 bg-emerald-950/40 text-emerald-200',
+  applied: 'border-line bg-deep text-ink',
+  interviewing: 'border-brand/40 bg-brand/10 text-brand',
+  rejected: 'border-red-200 bg-red-50 text-red-800',
+  offered: 'border-emerald-300 bg-emerald-50 text-emerald-900',
 };
 
 type Props = {

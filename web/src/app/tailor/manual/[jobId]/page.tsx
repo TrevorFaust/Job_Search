@@ -35,7 +35,7 @@ export default async function ManualTailorPage({ params }: { params: Params }) {
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
-      <Link href={backHref} className="text-sm text-zinc-500 hover:text-amber-300">
+      <Link href={backHref} className="text-sm text-ink-faint hover:text-brand">
         {application ? '← Back to job' : '← Manual jobs'}
       </Link>
       <div className="mt-6">

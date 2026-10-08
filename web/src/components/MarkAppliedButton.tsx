@@ -24,7 +24,7 @@ export function MarkAppliedButton({
   jobId,
   manualJobId,
   sessionId,
-  className = 'text-xs font-medium text-zinc-400 hover:text-amber-300',
+  className = 'text-xs font-medium text-ink-soft hover:text-brand',
   label = 'Mark applied',
 }: Props) {
   return (

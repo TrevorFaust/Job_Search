@@ -20,7 +20,7 @@ type Props = {
 };
 
 const fieldClass =
-  'mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600';
+  'mt-1 w-full rounded-lg border border-line bg-sheet px-3 py-2 text-sm text-ink placeholder:text-ink-faint';
 
 function emptyJob(): ProfileJob {
   return {
@@ -154,96 +154,96 @@ export function UserProfileEditor({ token, profile, isOwner }: Props) {
     <div className="space-y-10">
       <section id="profile" className="scroll-mt-8 space-y-4">
         <div>
-          <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold text-zinc-100">
+          <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold text-ink">
             Profile
           </h2>
-          <p className="mt-1 text-sm text-zinc-500">
+          <p className="mt-1 text-sm text-ink-faint">
             Stationary facts used on every tailored resume and cover letter: name, school, jobs, projects.
             Tailoring rewrites bullets, not these labels.
           </p>
         </div>
 
-        <div className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
-          <h3 className="text-sm font-medium text-zinc-300">Header</h3>
+        <div className="space-y-4 rounded-xl border border-line bg-paper p-5">
+          <h3 className="text-sm font-medium text-ink-soft">Header</h3>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block text-sm">
-              <span className="text-zinc-400">Name</span>
+              <span className="text-ink-soft">Name</span>
               <input className={fieldClass} value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
             </label>
             <label className="block text-sm">
-              <span className="text-zinc-400">Location</span>
+              <span className="text-ink-soft">Location</span>
               <input className={fieldClass} value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Seattle, WA" />
             </label>
             <label className="block text-sm">
-              <span className="text-zinc-400">Email on resume</span>
+              <span className="text-ink-soft">Email on resume</span>
               <input className={fieldClass} value={email} onChange={(e) => setEmail(e.target.value)} />
             </label>
             <label className="block text-sm">
-              <span className="text-zinc-400">Phone</span>
+              <span className="text-ink-soft">Phone</span>
               <input className={fieldClass} value={phone} onChange={(e) => setPhone(e.target.value)} />
             </label>
             <label className="block text-sm">
-              <span className="text-zinc-400">LinkedIn label</span>
+              <span className="text-ink-soft">LinkedIn label</span>
               <input className={fieldClass} value={linkedinLabel} onChange={(e) => setLinkedinLabel(e.target.value)} placeholder="linkedin.com/in/you" />
             </label>
             <label className="block text-sm">
-              <span className="text-zinc-400">LinkedIn URL</span>
+              <span className="text-ink-soft">LinkedIn URL</span>
               <input className={fieldClass} value={linkedinUrl} onChange={(e) => setLinkedinUrl(e.target.value)} />
             </label>
             <label className="block text-sm">
-              <span className="text-zinc-400">GitHub label</span>
+              <span className="text-ink-soft">GitHub label</span>
               <input className={fieldClass} value={githubLabel} onChange={(e) => setGithubLabel(e.target.value)} />
             </label>
             <label className="block text-sm">
-              <span className="text-zinc-400">GitHub URL</span>
+              <span className="text-ink-soft">GitHub URL</span>
               <input className={fieldClass} value={githubUrl} onChange={(e) => setGithubUrl(e.target.value)} />
             </label>
             <label className="block text-sm">
-              <span className="text-zinc-400">Website label</span>
+              <span className="text-ink-soft">Website label</span>
               <input className={fieldClass} value={websiteLabel} onChange={(e) => setWebsiteLabel(e.target.value)} />
             </label>
             <label className="block text-sm">
-              <span className="text-zinc-400">Website URL</span>
+              <span className="text-ink-soft">Website URL</span>
               <input className={fieldClass} value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} />
             </label>
           </div>
-          <label className="flex items-center gap-2 text-sm text-zinc-300">
-            <input type="checkbox" checked={relocate} onChange={(e) => setRelocate(e.target.checked)} className="rounded border-zinc-600" />
+          <label className="flex items-center gap-2 text-sm text-ink-soft">
+            <input type="checkbox" checked={relocate} onChange={(e) => setRelocate(e.target.checked)} className="rounded border-line" />
             Willing to relocate
           </label>
         </div>
 
-        <div className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
-          <h3 className="text-sm font-medium text-zinc-300">Education</h3>
+        <div className="space-y-4 rounded-xl border border-line bg-paper p-5">
+          <h3 className="text-sm font-medium text-ink-soft">Education</h3>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block text-sm">
-              <span className="text-zinc-400">School</span>
+              <span className="text-ink-soft">School</span>
               <input className={fieldClass} value={education.schoolBold} onChange={(e) => setEducation({ ...education, schoolBold: e.target.value })} />
             </label>
             <label className="block text-sm">
-              <span className="text-zinc-400">Campus / city</span>
+              <span className="text-ink-soft">Campus / city</span>
               <input className={fieldClass} value={education.schoolRest} onChange={(e) => setEducation({ ...education, schoolRest: e.target.value })} placeholder=": State College, PA" />
             </label>
             <label className="block text-sm sm:col-span-2">
-              <span className="text-zinc-400">Degree</span>
+              <span className="text-ink-soft">Degree</span>
               <input className={fieldClass} value={education.degree} onChange={(e) => setEducation({ ...education, degree: e.target.value })} />
             </label>
             <label className="block text-sm sm:col-span-2">
-              <span className="text-zinc-400">Minors / extras</span>
+              <span className="text-ink-soft">Minors / extras</span>
               <input className={fieldClass} value={education.minors} onChange={(e) => setEducation({ ...education, minors: e.target.value })} />
             </label>
           </div>
         </div>
 
-        <div className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
+        <div className="space-y-4 rounded-xl border border-line bg-paper p-5">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-medium text-zinc-300">Jobs</h3>
-            <button type="button" className="text-xs text-amber-400 hover:text-amber-300" onClick={() => setExperience((prev) => [...prev, emptyJob()])}>
+            <h3 className="text-sm font-medium text-ink-soft">Jobs</h3>
+            <button type="button" className="text-xs text-brand hover:text-brand" onClick={() => setExperience((prev) => [...prev, emptyJob()])}>
               Add job
             </button>
           </div>
           {experience.map((job, jobIndex) => (
-            <div key={jobIndex} className="space-y-3 rounded-lg border border-zinc-800 p-3">
+            <div key={jobIndex} className="space-y-3 rounded-lg border border-line p-3">
               <div className="grid gap-3 sm:grid-cols-2">
                 <input className={fieldClass} value={job.company} placeholder="Company" onChange={(e) => {
                   const next = [...experience];
@@ -284,7 +284,7 @@ export function UserProfileEditor({ token, profile, isOwner }: Props) {
                 </div>
               ))}
               <div className="flex gap-3">
-                <button type="button" className="text-xs text-zinc-400 hover:text-amber-300" onClick={() => {
+                <button type="button" className="text-xs text-ink-soft hover:text-brand" onClick={() => {
                   const next = [...experience];
                   next[jobIndex] = {
                     ...job,
@@ -294,7 +294,7 @@ export function UserProfileEditor({ token, profile, isOwner }: Props) {
                 }}>
                   Add title
                 </button>
-                <button type="button" className="text-xs text-zinc-500 hover:text-red-400" onClick={() => setExperience(experience.filter((_, i) => i !== jobIndex))}>
+                <button type="button" className="text-xs text-ink-faint hover:text-red-700" onClick={() => setExperience(experience.filter((_, i) => i !== jobIndex))}>
                   Remove job
                 </button>
               </div>
@@ -302,19 +302,19 @@ export function UserProfileEditor({ token, profile, isOwner }: Props) {
           ))}
         </div>
 
-        <div className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
+        <div className="space-y-4 rounded-xl border border-line bg-paper p-5">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-medium text-zinc-300">Projects</h3>
-            <button type="button" className="text-xs text-amber-400 hover:text-amber-300" onClick={() => setProjects((prev) => [...prev, emptyProject()])}>
+            <h3 className="text-sm font-medium text-ink-soft">Projects</h3>
+            <button type="button" className="text-xs text-brand hover:text-brand" onClick={() => setProjects((prev) => [...prev, emptyProject()])}>
               Add project
             </button>
           </div>
           <label className="block text-sm">
-            <span className="text-zinc-400">Projects section title</span>
+            <span className="text-ink-soft">Projects section title</span>
             <input className={fieldClass} value={projectsTitle} onChange={(e) => setProjectsTitle(e.target.value)} />
           </label>
           {projects.map((project, index) => (
-            <div key={index} className="space-y-2 rounded-lg border border-zinc-800 p-3">
+            <div key={index} className="space-y-2 rounded-lg border border-line p-3">
               <input className={fieldClass} value={project.title} placeholder="Project title" onChange={(e) => {
                 const next = [...projects];
                 next[index] = { ...project, title: e.target.value };
@@ -334,18 +334,18 @@ export function UserProfileEditor({ token, profile, isOwner }: Props) {
                   setProjects(next);
                 }}
               />
-              <button type="button" className="text-xs text-zinc-500 hover:text-red-400" onClick={() => setProjects(projects.filter((_, i) => i !== index))}>
+              <button type="button" className="text-xs text-ink-faint hover:text-red-700" onClick={() => setProjects(projects.filter((_, i) => i !== index))}>
                 Remove project
               </button>
             </div>
           ))}
         </div>
 
-        <div className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
-          <h3 className="text-sm font-medium text-zinc-300">Skills inventory</h3>
+        <div className="space-y-4 rounded-xl border border-line bg-paper p-5">
+          <h3 className="text-sm font-medium text-ink-soft">Skills inventory</h3>
           {skills.slice(0, 2).map((group, index) => (
             <label key={index} className="block text-sm">
-              <span className="text-zinc-400">{index === 0 ? 'Group 1 heading + tools' : 'Group 2 heading + tools'}</span>
+              <span className="text-ink-soft">{index === 0 ? 'Group 1 heading + tools' : 'Group 2 heading + tools'}</span>
               <input className={fieldClass} value={group.heading} onChange={(e) => {
                 const next = [...skills];
                 next[index] = { ...group, heading: e.target.value };
@@ -368,24 +368,24 @@ export function UserProfileEditor({ token, profile, isOwner }: Props) {
           ))}
         </div>
 
-        <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
-          <h3 className="text-sm font-medium text-zinc-300">Standing notes</h3>
-          <p className="text-xs text-zinc-500">Always sent with tailoring. Career pivot, licenses, constraints, or anything you do not want to retype.</p>
+        <div className="space-y-3 rounded-xl border border-line bg-paper p-5">
+          <h3 className="text-sm font-medium text-ink-soft">Standing notes</h3>
+          <p className="text-xs text-ink-faint">Always sent with tailoring. Career pivot, licenses, constraints, or anything you do not want to retype.</p>
           <textarea className={fieldClass} rows={5} value={contextNotes} onChange={(e) => setContextNotes(e.target.value)} />
         </div>
 
         {facts.length > 0 && (
-          <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
-            <h3 className="text-sm font-medium text-zinc-300">Learned from your answers</h3>
-            <p className="text-xs text-zinc-500">These accumulate as you tailor jobs. Remove anything that should not be reused.</p>
+          <div className="space-y-3 rounded-xl border border-line bg-paper p-5">
+            <h3 className="text-sm font-medium text-ink-soft">Learned from your answers</h3>
+            <p className="text-xs text-ink-faint">These accumulate as you tailor jobs. Remove anything that should not be reused.</p>
             <ul className="space-y-3">
               {facts.map((fact) => (
-                <li key={fact.id} className="rounded-lg border border-zinc-800 p-3">
+                <li key={fact.id} className="rounded-lg border border-line p-3">
                   <div className="flex items-start justify-between gap-3">
-                    <p className="text-xs uppercase tracking-wide text-zinc-500">{fact.topic}</p>
+                    <p className="text-xs uppercase tracking-wide text-ink-faint">{fact.topic}</p>
                     <button
                       type="button"
-                      className="text-xs text-zinc-500 hover:text-red-400"
+                      className="text-xs text-ink-faint hover:text-red-700"
                       onClick={() => {
                         startTransition(async () => {
                           await deleteLearnedFact(token, fact.id);
@@ -396,7 +396,7 @@ export function UserProfileEditor({ token, profile, isOwner }: Props) {
                       Remove
                     </button>
                   </div>
-                  <p className="mt-1 text-sm text-zinc-300">{fact.answer}</p>
+                  <p className="mt-1 text-sm text-ink-soft">{fact.answer}</p>
                 </li>
               ))}
             </ul>
@@ -406,19 +406,19 @@ export function UserProfileEditor({ token, profile, isOwner }: Props) {
 
       <section id="preferred" className="scroll-mt-8 space-y-4">
         <div>
-          <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold text-zinc-100">
+          <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold text-ink">
             Preferred jobs
           </h2>
-          <p className="mt-1 text-sm text-zinc-500">
+          <p className="mt-1 text-sm text-ink-faint">
             These interest areas fill the Preferred tab. Uncheck anything you do not want there.
           </p>
         </div>
-        <div className="grid gap-2 rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 sm:grid-cols-2">
+        <div className="grid gap-2 rounded-xl border border-line bg-paper p-5 sm:grid-cols-2">
           {INTEREST_CATEGORIES.map((cat) => (
-            <label key={cat.id} className="flex items-center gap-2 text-sm text-zinc-300">
+            <label key={cat.id} className="flex items-center gap-2 text-sm text-ink-soft">
               <input
                 type="checkbox"
-                className="rounded border-zinc-600"
+                className="rounded border-line"
                 checked={categories.includes(cat.id)}
                 onChange={(e) => {
                   setCategories((prev) =>
@@ -434,42 +434,42 @@ export function UserProfileEditor({ token, profile, isOwner }: Props) {
 
       <section id="billing" className="scroll-mt-8 space-y-4">
         <div>
-          <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold text-zinc-100">
+          <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold text-ink">
             AI billing
           </h2>
-          <p className="mt-1 text-sm text-zinc-500">
+          <p className="mt-1 text-sm text-ink-faint">
             Tailoring, ATS review, cover letters, and interview prep use the key you save here.
             {isOwner
               ? ' As the site owner you can keep using the server Anthropic key until you add your own.'
               : ' Other people cannot run charges on the owner account.'}
           </p>
         </div>
-        <div className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
+        <div className="space-y-4 rounded-xl border border-line bg-paper p-5">
           {profile.hasLlmKey ? (
-            <p className="text-sm text-emerald-300/90">
+            <p className="text-sm text-emerald-800">
               {profile.llm_provider === 'openai' ? 'OpenAI' : 'Anthropic'} key saved
               {profile.llm_api_key_last4 ? ` · …${profile.llm_api_key_last4}` : ''}.
             </p>
           ) : profile.usesOwnerLlm ? (
-            <p className="text-sm text-zinc-400">Using the owner Anthropic key for now.</p>
+            <p className="text-sm text-ink-soft">Using the owner Anthropic key for now.</p>
           ) : (
-            <p className="text-sm text-amber-200/90">Add a key before tailoring resumes.</p>
+            <p className="text-sm text-brand">Add a key before tailoring resumes.</p>
           )}
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block text-sm">
-              <span className="text-zinc-400">Provider</span>
+              <span className="text-ink-soft">Provider</span>
               <select className={fieldClass} value={provider} onChange={(e) => setProvider(e.target.value as LlmProvider)}>
                 <option value="anthropic">Anthropic (Claude)</option>
                 <option value="openai">OpenAI (ChatGPT)</option>
               </select>
             </label>
             <label className="block text-sm">
-              <span className="text-zinc-400">Model (optional)</span>
+              <span className="text-ink-soft">Model (optional)</span>
               <input className={fieldClass} value={model} onChange={(e) => setModel(e.target.value)} placeholder={provider === 'openai' ? 'gpt-4o' : 'claude-sonnet-4-6'} />
             </label>
           </div>
           <label className="block text-sm">
-            <span className="text-zinc-400">API key</span>
+            <span className="text-ink-soft">API key</span>
             <input
               className={fieldClass}
               type="password"
@@ -481,13 +481,13 @@ export function UserProfileEditor({ token, profile, isOwner }: Props) {
             />
           </label>
           <div className="flex gap-3">
-            <button type="button" onClick={saveKey} disabled={pending || !apiKey.trim()} className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-amber-300 disabled:opacity-50">
+            <button type="button" onClick={saveKey} disabled={pending || !apiKey.trim()} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-paper hover:bg-brand-soft disabled:opacity-50">
               Save key
             </button>
             {profile.hasLlmKey && (
               <button
                 type="button"
-                className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-400 hover:text-red-400"
+                className="rounded-lg border border-line px-4 py-2 text-sm text-ink-soft hover:text-red-700"
                 onClick={() => {
                   startTransition(async () => {
                     await deleteLlmApiKey(token);
@@ -506,12 +506,12 @@ export function UserProfileEditor({ token, profile, isOwner }: Props) {
           type="button"
           onClick={saveProfile}
           disabled={pending}
-          className="rounded-lg bg-amber-400 px-5 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-amber-300 disabled:opacity-50"
+          className="rounded-lg bg-brand px-5 py-2.5 text-sm font-semibold text-paper hover:bg-brand-soft disabled:opacity-50"
         >
           {pending ? 'Saving…' : 'Save profile'}
         </button>
-        {saved && <span className="text-sm text-emerald-400">Saved.</span>}
-        {error && <span className="text-sm text-red-400">{error}</span>}
+        {saved && <span className="text-sm text-emerald-800">Saved.</span>}
+        {error && <span className="text-sm text-red-700">{error}</span>}
       </div>
     </div>
   );

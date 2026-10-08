@@ -76,47 +76,47 @@ export default async function JobDetailPage({
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
-      <BoardHomeLink from={from} className="text-sm text-zinc-500 hover:text-amber-300">
+      <BoardHomeLink from={from} className="text-sm text-ink-faint hover:text-brand">
         ← Back to job board
       </BoardHomeLink>
 
-      <header className="mt-6 rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
+      <header className="mt-6 rounded-2xl border border-line bg-sheet p-6 shadow-[0_1px_0_rgb(26_28_24/0.04),0_16px_36px_-24px_rgb(26_28_24/0.4)]">
         {job.is_special && priorityMeta && !application && (
-          <div className="mb-4 rounded-lg border border-amber-400/50 bg-amber-400/10 px-4 py-3">
-            <p className="text-xs font-bold uppercase tracking-wider text-amber-300">
+          <div className="mb-4 rounded-lg border border-brand/40 bg-brand/10 px-4 py-3">
+            <p className="text-xs font-bold uppercase tracking-wider text-brand">
               Priority opportunity
             </p>
-            <p className="mt-1 text-sm text-amber-100/90">
+            <p className="mt-1 text-sm text-brand">
               This {priorityMeta.label} role is watched daily. Find it under the Priority tab on the job board.
             </p>
           </div>
         )}
-        <p className="text-xs uppercase tracking-wide text-amber-400/80">{job.source}</p>
-        <h1 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold text-zinc-50">
+        <p className="text-xs uppercase tracking-wide text-brand">{job.source}</p>
+        <h1 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold text-ink">
           {job.title}
         </h1>
-        <p className="mt-2 text-lg text-zinc-300">{job.company ?? 'Unknown company'}</p>
-        <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-zinc-500">
+        <p className="mt-2 text-lg text-ink-soft">{job.company ?? 'Unknown company'}</p>
+        <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-ink-faint">
           <div>
-            <dt className="inline text-zinc-600">Location </dt>
-            <dd className="inline text-zinc-400">{job.location ?? 'Not listed'}</dd>
+            <dt className="inline text-ink-faint">Location </dt>
+            <dd className="inline text-ink-soft">{job.location ?? 'Not listed'}</dd>
           </div>
           {salary && (
             <div>
-              <dt className="inline text-zinc-600">Salary </dt>
-              <dd className="inline font-mono text-emerald-400">{salary}</dd>
+              <dt className="inline text-ink-faint">Salary </dt>
+              <dd className="inline font-semibold tabular-nums text-brand">{salary}</dd>
             </div>
           )}
           <div>
-            <dt className="inline text-zinc-600">Posted </dt>
-            <dd className="inline text-zinc-400">
+            <dt className="inline text-ink-faint">Posted </dt>
+            <dd className="inline text-ink-soft">
               {formatPostedDate(job.posted_at, job.created_at)}
             </dd>
           </div>
           {application?.applied_at && (
             <div>
-              <dt className="inline text-zinc-600">Applied </dt>
-              <dd className="inline text-zinc-400">
+              <dt className="inline text-ink-faint">Applied </dt>
+              <dd className="inline text-ink-soft">
                 {formatPostedDate(application.applied_at, application.applied_at)}
               </dd>
             </div>
@@ -128,19 +128,19 @@ export default async function JobDetailPage({
             <>
               <Link
                 href={`/tailor/${job.id}`}
-                className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-amber-300"
+                className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-paper hover:bg-brand-soft"
               >
                 Tailor resume
               </Link>
               <MarkAppliedButton
                 jobId={job.id}
                 label="I've applied"
-                className="rounded-lg border border-zinc-600 px-4 py-2 text-sm text-zinc-300 hover:border-amber-500/50 hover:text-amber-300"
+                className="rounded-lg border border-line px-4 py-2 text-sm text-ink-soft hover:border-brand hover:text-brand"
               />
               <DismissJobButton
                 jobId={job.id}
                 redirectTo="/"
-                className="text-sm text-zinc-500 hover:text-zinc-300"
+                className="text-sm text-ink-faint hover:text-ink"
               />
             </>
           )}
@@ -149,25 +149,25 @@ export default async function JobDetailPage({
               <ApplicationStageSelect jobId={job.id} stage={application.stage} />
               <Link
                 href="/?view=applied"
-                className="text-sm text-amber-400 hover:underline"
+                className="text-sm text-brand hover:underline"
               >
                 View in Applied tab
               </Link>
-              <RemoveApplicationButton jobId={job.id} className="text-sm text-zinc-500 hover:text-zinc-300" />
+              <RemoveApplicationButton jobId={job.id} className="text-sm text-ink-faint hover:text-ink" />
             </div>
           )}
           <a
             href={job.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="rounded-lg border border-zinc-600 px-4 py-2 text-sm text-zinc-300 hover:border-amber-500/50 hover:text-amber-300"
+            className="rounded-lg border border-line px-4 py-2 text-sm text-ink-soft hover:border-brand hover:text-brand"
           >
             Apply on original site ↗
           </a>
         </div>
       </header>
 
-      <Suspense fallback={<p className="mt-8 text-sm text-zinc-500">Loading…</p>}>
+      <Suspense fallback={<p className="mt-8 text-sm text-ink-faint">Loading…</p>}>
         <JobDetailTabs
           description={job.description ?? ''}
           tailorHref={`/tailor/${job.id}`}

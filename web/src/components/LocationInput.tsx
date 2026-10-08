@@ -103,13 +103,13 @@ export function LocationInput({ name, defaultValues = [] }: Props) {
       {selected.map((loc) => (
         <div key={loc} className="flex items-center gap-2">
           <input type="hidden" name={name} value={loc} />
-          <span className="min-w-0 flex-1 truncate rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-200">
+          <span className="min-w-0 flex-1 truncate rounded-lg border border-line bg-sheet px-3 py-1.5 text-sm text-ink">
             {loc}
           </span>
           <button
             type="button"
             onClick={() => removeLocation(loc)}
-            className="shrink-0 rounded px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+            className="shrink-0 rounded px-2 py-1 text-xs text-ink-faint hover:bg-deep hover:text-ink"
             aria-label={`Remove ${loc}`}
             suppressHydrationWarning
           >
@@ -163,20 +163,20 @@ export function LocationInput({ name, defaultValues = [] }: Props) {
           role="combobox"
           aria-expanded={showDropdown}
           aria-autocomplete="list"
-          className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
+          className="w-full rounded-lg border border-line bg-sheet px-3 py-2 text-ink"
         />
         {showDropdown && (
-          <ul className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-zinc-700 bg-zinc-950 py-1 shadow-lg">
+          <ul className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-line bg-sheet py-1 shadow-lg">
             {loading && (
-              <li className="px-3 py-1.5 text-sm text-zinc-500">Searching locations…</li>
+              <li className="px-3 py-1.5 text-sm text-ink-faint">Searching locations…</li>
             )}
             {!loading &&
               suggestions.map((s, index) => (
                 <li key={`${s.label}-${s.lat}`}>
                   <button
                     type="button"
-                    className={`w-full px-3 py-1.5 text-left text-sm hover:bg-zinc-800 ${
-                      index === activeIndex ? 'bg-zinc-800 text-amber-300' : 'text-zinc-300'
+                    className={`w-full px-3 py-1.5 text-left text-sm hover:bg-deep ${
+                      index === activeIndex ? 'bg-deep text-brand' : 'text-ink-soft'
                     }`}
                     onMouseDown={(e) => e.preventDefault()}
                     onMouseEnter={() => setActiveIndex(index)}
@@ -190,7 +190,7 @@ export function LocationInput({ name, defaultValues = [] }: Props) {
               <li>
                 <button
                   type="button"
-                  className="w-full px-3 py-1.5 text-left text-sm text-zinc-500 hover:bg-zinc-800"
+                  className="w-full px-3 py-1.5 text-left text-sm text-ink-faint hover:bg-deep"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => addLocation(trimmed)}
                 >

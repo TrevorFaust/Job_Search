@@ -101,7 +101,7 @@ function ResumePreviewStaticInner({ draft }: Props) {
   const education = draft.education ?? defaultResumeEducation();
 
   return (
-    <div className="rounded-lg border border-zinc-700 bg-zinc-950 p-3 overflow-x-auto">
+    <div className="rounded-2xl border border-line bg-deep/55 p-4 overflow-x-auto">
       <div className="mx-auto bg-white text-black shadow-xl" style={sheetStyle}>
         <div
           style={{

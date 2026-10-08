@@ -1,27 +1,122 @@
 @import "tailwindcss";
 
 :root {
-  --background: #070708;
-  --foreground: #f4f4f5;
-  --accent: #fbbf24;
-  --muted: #71717a;
-  --card: #18181b;
-  --border: #27272a;
+  --background: #e6e3db;
+  --foreground: #1a1c18;
+  --accent: #2f5d4a;
+  --accent-soft: #3d6f5f;
+  --muted: #5c6358;
+  --card: #fffdf8;
+  --border: #c9c2b4;
+  --font-slogan: var(--font-display);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-ink: #1a1c18;
+  --color-ink-soft: #3c4238;
+  --color-ink-faint: #5c6358;
+  --color-paper: #f7f4ee;
+  --color-sheet: #fffdf8;
+  --color-deep: #d8d2c6;
+  --color-line: #c9c2b4;
+  --color-brand: #2f5d4a;
+  --color-brand-soft: #3d6f5f;
   --font-sans: var(--font-body);
   --font-display: var(--font-display);
+  --font-slogan: var(--font-display);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--background);
   color: var(--foreground);
   font-family: var(--font-body), system-ui, sans-serif;
   background-image:
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(251, 191, 36, 0.08), transparent),
-    linear-gradient(to bottom, #070708, #0c0c0e);
-  min-height: 100vh;
+    radial-gradient(1100px 520px at 8% -12%, rgb(47 93 74 / 0.14), transparent 58%),
+    radial-gradient(780px 420px at 100% 0%, rgb(120 90 50 / 0.08), transparent 52%);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.28;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.45'/%3E%3C/svg%3E");
+  mix-blend-mode: multiply;
+}
+
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
+::selection {
+  background: #c5ddd2;
+  color: #1a1c18;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+a,
+button:not(:disabled),
+select,
+summary,
+label:has(> input[type="checkbox"]) {
+  cursor: pointer;
+}
+
+input,
+select,
+textarea {
+  accent-color: var(--accent);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgb(47 93 74 / 0.16);
+}
+
+textarea.bg-transparent:focus,
+input.bg-transparent:focus {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

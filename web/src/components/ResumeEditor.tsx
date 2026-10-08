@@ -45,9 +45,9 @@ export function ResumeEditor({ token, resume }: Props) {
   return (
     <section className="space-y-6">
       {resume && (
-        <div className="rounded-xl border border-emerald-900/50 bg-emerald-950/20 p-4 text-sm text-emerald-200/90">
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
           <p className="font-medium">Active resume saved</p>
-          <p className="mt-1 text-emerald-300/70">
+          <p className="mt-1 text-emerald-800">
             {resume.label}
             {resume.source_filename ? ` · ${resume.source_filename}` : ''}
             {' · '}
@@ -56,48 +56,48 @@ export function ResumeEditor({ token, resume }: Props) {
         </div>
       )}
 
-      <form action={handleFileSubmit} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
-        <h2 className="font-medium text-zinc-200">Upload file</h2>
-        <p className="text-sm text-zinc-500">DOCX, PDF, or plain text. Replaces your current master resume.</p>
+      <form action={handleFileSubmit} className="space-y-3 rounded-xl border border-line bg-paper p-5">
+        <h2 className="font-medium text-ink">Upload file</h2>
+        <p className="text-sm text-ink-faint">DOCX, PDF, or plain text. Replaces your current master resume.</p>
         <input type="hidden" name="token" value={token} />
         <input
           ref={fileRef}
           type="file"
           name="file"
           accept=".docx,.pdf,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
-          className="block w-full text-sm text-zinc-400 file:mr-4 file:rounded-lg file:border-0 file:bg-zinc-800 file:px-4 file:py-2 file:text-sm file:font-medium file:text-zinc-200 hover:file:bg-zinc-700"
+          className="block w-full text-sm text-ink-soft file:mr-4 file:rounded-lg file:border-0 file:bg-deep file:px-4 file:py-2 file:text-sm file:font-medium file:text-ink hover:file:bg-deep"
           required={!resume}
         />
         <button
           type="submit"
           disabled={pending}
-          className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-amber-300 disabled:opacity-50"
+          className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-paper hover:bg-brand-soft disabled:opacity-50"
         >
           {pending ? 'Uploading…' : 'Upload resume'}
         </button>
       </form>
 
-      <form action={handleTextSubmit} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
-        <h2 className="font-medium text-zinc-200">Or paste text</h2>
+      <form action={handleTextSubmit} className="space-y-3 rounded-xl border border-line bg-paper p-5">
+        <h2 className="font-medium text-ink">Or paste text</h2>
         <textarea
           name="content_text"
           defaultValue={resume?.content_text ?? ''}
           rows={14}
           placeholder="Paste your full resume here…"
-          className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-sm text-zinc-100"
+          className="w-full rounded-lg border border-line bg-sheet px-3 py-2 font-mono text-sm text-ink"
           required={!resume}
         />
         <button
           type="submit"
           disabled={pending}
-          className="rounded-lg border border-zinc-600 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-amber-500/50 hover:text-amber-300 disabled:opacity-50"
+          className="rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink hover:border-brand hover:text-brand disabled:opacity-50"
         >
           {pending ? 'Saving…' : 'Save pasted resume'}
         </button>
       </form>
 
-      {error && <p className="text-sm text-red-400">{error}</p>}
-      {saved && <p className="text-sm text-emerald-400">Resume saved.</p>}
+      {error && <p className="text-sm text-red-700">{error}</p>}
+      {saved && <p className="text-sm text-emerald-800">Resume saved.</p>}
     </section>
   );
 }

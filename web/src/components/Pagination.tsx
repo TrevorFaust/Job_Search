@@ -15,15 +15,15 @@ export function Pagination({ page, totalPages, total, hrefForPage }: Props) {
   );
 
   return (
-    <nav className="flex flex-wrap items-center justify-between gap-4 border-t border-zinc-800 pt-6">
-      <p className="text-sm text-zinc-500">
+    <nav className="flex flex-wrap items-center justify-between gap-4 border-t border-line pt-6">
+      <p className="text-sm text-ink-faint">
         Page {page} of {totalPages} · {total} jobs total
       </p>
       <div className="flex flex-wrap items-center gap-1">
         {page > 1 && (
           <Link
             href={hrefForPage(page - 1)}
-            className="rounded-lg border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:border-zinc-500"
+            className="rounded-full border border-line bg-sheet px-3.5 py-1.5 text-sm text-ink-soft hover:border-ink/25"
           >
             ← Prev
           </Link>
@@ -33,13 +33,13 @@ export function Pagination({ page, totalPages, total, hrefForPage }: Props) {
           const gap = prev && p - prev > 1;
           return (
             <span key={p} className="flex items-center gap-1">
-              {gap && <span className="px-1 text-zinc-600">…</span>}
+              {gap && <span className="px-1 text-ink-faint">…</span>}
               <Link
                 href={hrefForPage(p)}
-                className={`rounded-lg px-3 py-1.5 text-sm ${
+                className={`rounded-full px-3.5 py-1.5 text-sm ${
                   p === page
-                    ? 'bg-amber-400 font-semibold text-zinc-950'
-                    : 'border border-zinc-700 text-zinc-300 hover:border-zinc-500'
+                    ? 'bg-brand font-semibold text-paper'
+                    : 'border border-line bg-sheet text-ink-soft hover:border-ink/25'
                 }`}
               >
                 {p}
@@ -50,7 +50,7 @@ export function Pagination({ page, totalPages, total, hrefForPage }: Props) {
         {page < totalPages && (
           <Link
             href={hrefForPage(page + 1)}
-            className="rounded-lg border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:border-zinc-500"
+            className="rounded-full border border-line bg-sheet px-3.5 py-1.5 text-sm text-ink-soft hover:border-ink/25"
           >
             Next →
           </Link>

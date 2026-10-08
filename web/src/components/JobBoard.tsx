@@ -182,11 +182,11 @@ export function JobBoard({
       <Suspense fallback={null}>
         <PersistBoardFilters />
       </Suspense>
-      <div className="grid gap-8 lg:grid-cols-[240px_minmax(0,1fr)]">
+      <div className="grid gap-8 lg:grid-cols-[280px_minmax(0,1fr)]">
       <FilterSidebar filters={filters} view={view} stage={stage} sort={sort} q={q} preferredCategories={preferredCategories} />
 
       <div className="space-y-6">
-        <form action="/" method="get" className="flex gap-2">
+        <form action="/" method="get" className="flex gap-2 rounded-2xl border border-line bg-sheet p-1.5 shadow-[0_1px_0_rgb(26_28_24/0.04),0_16px_36px_-24px_rgb(26_28_24/0.4)]">
           <input type="hidden" name="view" value={view} />
           {view === 'applied' && stage && <input type="hidden" name="stage" value={stage} />}
           {sort !== 'date' && <input type="hidden" name="sort" value={sort} />}
@@ -211,25 +211,25 @@ export function JobBoard({
             name="q"
             defaultValue={q}
             placeholder="Search title, company, description…"
-            className="min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600"
+            className="min-w-0 flex-1 rounded-xl bg-paper px-3 py-2.5 text-sm text-ink placeholder:text-ink-faint"
           />
           <button
             type="submit"
-            className="rounded-xl bg-zinc-800 px-4 py-2.5 text-sm font-medium text-zinc-200 hover:bg-zinc-700"
+            className="rounded-full bg-brand px-4 py-2.5 text-sm font-semibold text-paper shadow-sm transition hover:bg-brand-soft"
           >
             Search
           </button>
           {q && (
             <a
               href={hrefFor({ q: '', page: 1 })}
-              className="flex items-center rounded-xl border border-zinc-700 px-3 text-sm text-zinc-500 hover:text-zinc-300"
+              className="flex items-center rounded-full px-3 text-sm text-ink-faint hover:text-ink"
             >
               Clear
             </a>
           )}
         </form>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="inline-flex max-w-full flex-wrap gap-1 rounded-full bg-deep/70 p-1">
           {BOARD_VIEWS.filter((v) => !v.signedInOnly || signedIn).map((v) => {
             const showNew = v.id === 'priority' && seenReady && newCount > 0;
             return (
@@ -243,18 +243,14 @@ export function JobBoard({
                 }
                 className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium transition ${
                   view === v.id
-                    ? 'bg-amber-400 text-zinc-950'
-                    : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                    ? 'bg-sheet text-ink shadow-sm'
+                    : 'text-ink-soft hover:bg-sheet/70 hover:text-ink'
                 }`}
               >
                 {v.label}
                 {showNew ? (
                   <span
-                    className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-bold tabular-nums ${
-                      view === v.id
-                        ? 'bg-zinc-950 text-amber-300'
-                        : 'bg-amber-400 text-zinc-950'
-                    }`}
+                    className="inline-flex min-w-5 items-center justify-center rounded-full bg-brand px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-paper"
                   >
                     {newCount}
                   </span>
@@ -265,7 +261,7 @@ export function JobBoard({
         </div>
 
         {view === 'priority' && (organizations.length > 0 || locations.length > 0) && (
-          <form action="/" method="get" className="flex flex-wrap items-end gap-3 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
+          <form action="/" method="get" className="flex flex-wrap items-end gap-3 rounded-xl border border-line bg-paper p-3">
             <input type="hidden" name="view" value="priority" />
             {sort !== 'date' && <input type="hidden" name="sort" value={sort} />}
             {q && <input type="hidden" name="q" value={q} />}
@@ -278,11 +274,11 @@ export function JobBoard({
             )}
             {organizations.length > 0 && (
               <label className="text-sm">
-                <span className="mb-1 block text-zinc-500">Organization</span>
+                <span className="mb-1 block text-ink-faint">Organization</span>
                 <select
                   name="org"
                   defaultValue={filters.priorityOrg ?? ''}
-                  className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+                  className="rounded-lg border border-line bg-sheet px-3 py-2 text-sm text-ink"
                 >
                   <option value="">All organizations</option>
                   {organizations.map((org) => (
@@ -295,11 +291,11 @@ export function JobBoard({
             )}
             {locations.length > 0 && (
               <label className="text-sm">
-                <span className="mb-1 block text-zinc-500">Location</span>
+                <span className="mb-1 block text-ink-faint">Location</span>
                 <select
                   name="place"
                   defaultValue={filters.priorityPlace ?? ''}
-                  className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+                  className="rounded-lg border border-line bg-sheet px-3 py-2 text-sm text-ink"
                 >
                   <option value="">All locations</option>
                   {locations.map((place) => (
@@ -312,7 +308,7 @@ export function JobBoard({
             )}
             <button
               type="submit"
-              className="rounded-lg bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 hover:bg-zinc-700"
+              className="rounded-lg bg-deep px-4 py-2 text-sm font-medium text-ink hover:bg-deep"
             >
               Filter
             </button>
@@ -322,7 +318,7 @@ export function JobBoard({
                   { ...filters, priorityOrg: undefined, priorityPlace: undefined },
                   { view: 'priority', sort, q }
                 )}
-                className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-500 hover:text-zinc-300"
+                className="rounded-lg border border-line px-3 py-2 text-sm text-ink-faint hover:text-ink"
               >
                 Clear
               </a>
@@ -331,11 +327,11 @@ export function JobBoard({
         )}
 
         {signedIn && view === 'applied' && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5">
             <a
               href={hrefFor({ stage: '', page: 1 })}
-              className={`rounded-full px-3 py-1 text-xs font-medium ${
-                !stage ? 'bg-zinc-700 text-zinc-100' : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200'
+              className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                !stage ? 'border-ink bg-ink text-paper' : 'border-line bg-sheet text-ink-soft hover:text-ink'
               }`}
             >
               All stages
@@ -344,8 +340,8 @@ export function JobBoard({
               <a
                 key={s}
                 href={hrefFor({ stage: s, page: 1 })}
-                className={`rounded-full px-3 py-1 text-xs font-medium ${
-                  stage === s ? 'bg-zinc-700 text-zinc-100' : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200'
+                className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                  stage === s ? 'border-ink bg-ink text-paper' : 'border-line bg-sheet text-ink-soft hover:text-ink'
                 }`}
               >
                 {STAGE_LABELS[s]}
@@ -354,7 +350,7 @@ export function JobBoard({
           </div>
         )}
 
-        <div className="flex flex-wrap items-center gap-2 text-sm text-zinc-500">
+        <div className="flex flex-wrap items-center gap-2 text-sm text-ink-faint">
           <span>Sort by</span>
           {SORT_OPTIONS.map((s) => {
             const active = s.id === 'date' ? isDateSort(sort) : isSalarySort(sort);
@@ -363,7 +359,7 @@ export function JobBoard({
                 key={s.id}
                 href={hrefFor({ sort: nextSort(sort, s.id), page: 1 })}
                 className={`rounded px-2 py-0.5 ${
-                  active ? 'text-amber-300 underline' : 'hover:text-zinc-300'
+                  active ? 'text-brand underline' : 'hover:text-ink'
                 }`}
               >
                 {sortOptionLabel(s.id, sort)}
@@ -376,13 +372,13 @@ export function JobBoard({
         </div>
 
         {view === 'preferred' && (
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-ink-faint">
             Jobs matching the interest areas saved in your profile
             {settingsToken ? (
               <>
                 {' '}
                 (
-                <a href={`/settings/${settingsToken}#preferred`} className="text-amber-400 hover:underline">
+                <a href={`/settings/${settingsToken}#preferred`} className="text-brand hover:underline">
                   edit
                 </a>
                 )
@@ -393,7 +389,7 @@ export function JobBoard({
         )}
 
         {view === 'priority' && (
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-ink-faint">
             Watched / priority roles only — kept off All jobs. The badge counts jobs you haven&apos;t
             scrolled onto yet; open each page to mark that page as seen (clicking the tab once won&apos;t
             clear hundreds of jobs).
@@ -401,7 +397,7 @@ export function JobBoard({
         )}
 
         {view === 'all' && (
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-ink-faint">
             Showing every scraped job in your selected timeline (priority watched roles live under Priority).
             {signedIn
               ? ' Jobs you mark as applied move to the Applied tab.'
@@ -412,7 +408,7 @@ export function JobBoard({
         )}
 
         {view === 'applied' && (
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-ink-faint">
             Jobs you&apos;ve applied to. Update the stage as you hear back — applied, interviewing,
             rejected, or offered. Jobs in the interviewing stage show a prep button below the stage
             dropdown.
@@ -420,17 +416,17 @@ export function JobBoard({
         )}
 
         {!signedIn && (
-          <p className="text-sm text-zinc-500">
-            <a href="/sign-in" className="text-amber-400 hover:underline">
+          <p className="text-sm text-ink-faint">
+            <a href="/sign-in" className="text-brand hover:underline">
               Sign in
             </a>{' '}
             to tailor resumes, track applications, and manage digest email preferences.
           </p>
         )}
 
-        <div className="divide-y divide-zinc-800 rounded-xl border border-zinc-800 bg-zinc-900/50">
+        <div className="space-y-3">
           {jobs.length === 0 ? (
-            <p className="p-8 text-center text-zinc-500">
+            <p className="rounded-2xl border border-line bg-sheet p-8 text-center text-ink-faint shadow-sm">
               {view === 'applied'
                 ? stage
                   ? `No jobs in "${STAGE_LABELS[stage]}" yet.`
@@ -474,26 +470,26 @@ export function JobBoard({
 
               const article = (
               <article
-                className={`p-5 transition hover:bg-zinc-900 ${
-                  isNew ? 'border-l-2 border-l-amber-400 bg-amber-400/[0.04]' : ''
+                className={`rounded-2xl border bg-sheet p-5 shadow-[0_1px_0_rgb(26_28_24/0.04),0_14px_32px_-22px_rgb(26_28_24/0.45)] transition hover:border-brand/40 motion-safe:hover:-translate-y-0.5 ${
+                  isNew ? 'border-brand/50 bg-brand/5' : 'border-line'
                 }`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       {isNew ? (
-                        <span className="rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-zinc-950">
+                        <span className="rounded-full bg-brand px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-paper">
                           New
                         </span>
                       ) : null}
                       <Link
                         href={jobHref(job)}
-                        className="text-lg font-semibold text-zinc-50 hover:text-amber-300"
+                        className="font-[family-name:var(--font-display)] text-xl font-medium tracking-[-0.02em] text-ink hover:text-brand"
                       >
                         {job.title}
                       </Link>
                       {job.is_special && view !== 'priority' && (
-                        <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-300">
+                        <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand">
                           Priority
                         </span>
                       )}
@@ -505,16 +501,16 @@ export function JobBoard({
                         />
                       )}
                     </div>
-                    <p className="mt-1.5 text-sm font-medium text-zinc-300">
+                    <p className="mt-1.5 text-sm font-medium text-ink-soft">
                       {job.company ?? priorityMeta?.label ?? 'Unknown company'}
-                      <span className="mx-2 text-zinc-600">·</span>
-                      <span className="text-amber-400/90">
+                      <span className="mx-2 text-ink-faint">·</span>
+                      <span className="text-brand">
                         {view === 'applied' && job.applied_at
                           ? `Applied ${formatPostedDate(job.applied_at, job.applied_at)}`
                           : `Posted ${formatPostedDate(job.posted_at, job.created_at)}`}
                       </span>
                     </p>
-                    <p className="mt-0.5 text-sm text-zinc-500">
+                    <p className="mt-0.5 text-sm text-ink-faint">
                       {job.location ?? 'Location n/a'} · {job.source}
                     </p>
                     {matchedCategories.length > 0 && (
@@ -522,7 +518,7 @@ export function JobBoard({
                         {matchedCategories.map((catId) => (
                           <span
                             key={catId}
-                            className="rounded-full bg-amber-400/10 px-2 py-0.5 text-xs text-amber-300"
+                            className="rounded-full bg-brand/10 px-2 py-0.5 text-xs text-brand"
                           >
                             {getCategoryLabel(catId)}
                           </span>
@@ -531,7 +527,7 @@ export function JobBoard({
                     )}
                   </div>
                   <div className="shrink-0 text-right">
-                    <div className="font-mono text-sm text-emerald-400">{salaryDisplay(job)}</div>
+                    <div className="text-sm font-semibold tabular-nums text-brand">{salaryDisplay(job)}</div>
                     {signedIn && (view === 'all' || view === 'preferred' || view === 'priority') && (
                       <div className="mt-2 flex flex-col items-end gap-1">
                         {view === 'priority' && priorityMeta && (
@@ -539,14 +535,14 @@ export function JobBoard({
                             href={job.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-xs font-medium text-zinc-400 hover:text-amber-300"
+                            className="text-xs font-medium text-ink-soft hover:text-brand"
                           >
                             {priorityMeta.externalCta}
                           </a>
                         )}
                         <a
                           href={tailorHref(job)}
-                          className="text-xs font-medium text-amber-400 hover:text-amber-300"
+                          className="text-xs font-medium text-brand hover:text-brand"
                         >
                           Tailor resume →
                         </a>
@@ -572,7 +568,7 @@ export function JobBoard({
                         />
                         <a
                           href={tailorHref(job)}
-                          className="text-xs font-medium text-amber-400 hover:text-amber-300"
+                          className="text-xs font-medium text-brand hover:text-brand"
                         >
                           View resume & cover letter →
                         </a>
@@ -594,7 +590,7 @@ export function JobBoard({
                   return (
                     <Link
                       href={jobHref(job)}
-                      className="mt-3 block line-clamp-2 text-sm text-zinc-500 hover:text-zinc-400"
+                      className="mt-3 block line-clamp-2 text-sm text-ink-faint hover:text-ink-soft"
                     >
                       {preview}
                     </Link>

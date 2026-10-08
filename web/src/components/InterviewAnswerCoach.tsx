@@ -37,7 +37,7 @@ function AnswerTweakForm({
 
   return (
     <form
-      className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-900/40 p-3"
+      className="space-y-2 rounded-lg border border-line bg-paper p-3"
       onSubmit={(e) => {
         e.preventDefault();
         const trimmed = notes.trim();
@@ -46,7 +46,7 @@ function AnswerTweakForm({
       }}
     >
       <label className="block text-sm">
-        <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+        <span className="text-xs font-medium uppercase tracking-wide text-ink-faint">
           Tweak this answer
         </span>
         <textarea
@@ -62,14 +62,14 @@ function AnswerTweakForm({
           rows={2}
           maxLength={1500}
           placeholder="I like this — just make it shorter, or swap in the NFL example…"
-          className="mt-1 w-full min-h-16 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-base text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500/60 focus:outline-none focus:ring-1 focus:ring-amber-500/40"
+          className="mt-1 w-full min-h-16 rounded-lg border border-line bg-sheet px-3 py-2 text-base text-ink placeholder:text-ink-faint focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/30"
           disabled={disabled}
         />
       </label>
       <button
         type="submit"
         disabled={disabled || !notes.trim()}
-        className="rounded-lg border border-amber-500/40 px-3 py-1.5 text-sm font-medium text-amber-300 hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+        className="rounded-lg border border-brand/40 px-3 py-1.5 text-sm font-medium text-brand hover:bg-brand/10 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {pending ? 'Applying tweaks…' : 'Apply tweaks'}
       </button>
@@ -157,9 +157,9 @@ export function InterviewAnswerCoach({
   }
 
   return (
-    <div className="border-t border-zinc-800 pt-5">
-      <h3 className="text-sm font-medium text-zinc-200">Answer a question they asked</h3>
-      <p className="mt-1 text-sm text-zinc-500">
+    <div className="border-t border-line pt-5">
+      <h3 className="text-sm font-medium text-ink">Answer a question they asked</h3>
+      <p className="mt-1 text-sm text-ink-faint">
         Paste an interview question. We&apos;ll draft a talking track from your resume, tailor
         Q&amp;A, and this role — without inventing experience.
       </p>
@@ -172,7 +172,7 @@ export function InterviewAnswerCoach({
         }}
       >
         <label className="block text-sm">
-          <span className="text-zinc-400">Their question</span>
+          <span className="text-ink-soft">Their question</span>
           <textarea
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
@@ -185,7 +185,7 @@ export function InterviewAnswerCoach({
             rows={3}
             maxLength={2000}
             placeholder="Tell me about a time you had to influence without authority…"
-            className="mt-1 w-full min-h-20 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-base text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500/60 focus:outline-none focus:ring-1 focus:ring-amber-500/40"
+            className="mt-1 w-full min-h-20 rounded-lg border border-line bg-sheet px-3 py-2 text-base text-ink placeholder:text-ink-faint focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/30"
             disabled={pending}
           />
         </label>
@@ -193,18 +193,18 @@ export function InterviewAnswerCoach({
           <button
             type="submit"
             disabled={pending || !question.trim()}
-            className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-paper hover:bg-brand-soft disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busyId === 'new' ? 'Drafting…' : 'Draft my answer'}
           </button>
           {pending && busyId === 'new' && (
-            <p className="text-sm text-zinc-500">Pulling from your resume and history…</p>
+            <p className="text-sm text-ink-faint">Pulling from your resume and history…</p>
           )}
         </div>
       </form>
 
       {error && (
-        <p className="mt-3 text-sm text-red-400" role="alert">
+        <p className="mt-3 text-sm text-red-700" role="alert">
           {error}
         </p>
       )}
@@ -217,27 +217,27 @@ export function InterviewAnswerCoach({
             return (
               <div
                 key={answer.id}
-                className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/50"
+                className="overflow-hidden rounded-lg border border-line bg-sheet"
               >
                 <button
                   type="button"
                   onClick={() => setOpenId(isOpen ? null : answer.id)}
-                  className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-zinc-900/80"
+                  className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-deep/70"
                   aria-expanded={isOpen}
                 >
-                  <span className="min-w-0 flex-1 text-sm font-medium text-zinc-100">
+                  <span className="min-w-0 flex-1 text-sm font-medium text-ink">
                     {answer.question}
                   </span>
-                  <span className="shrink-0 text-xs text-zinc-500">{isOpen ? '−' : '+'}</span>
+                  <span className="shrink-0 text-xs text-ink-faint">{isOpen ? '−' : '+'}</span>
                 </button>
 
                 {isOpen ? (
-                  <div className="space-y-3 border-t border-zinc-800 px-4 py-3 text-sm">
+                  <div className="space-y-3 border-t border-line px-4 py-3 text-sm">
                     <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
                         onClick={() => copyTrack(answer)}
-                        className="rounded-lg border border-zinc-600 px-3 py-1.5 text-sm text-zinc-300 hover:border-amber-500/50"
+                        className="rounded-lg border border-line px-3 py-1.5 text-sm text-ink-soft hover:border-brand"
                       >
                         {copiedId === answer.id ? 'Copied' : 'Copy talking track'}
                       </button>
@@ -245,39 +245,39 @@ export function InterviewAnswerCoach({
                         type="button"
                         onClick={() => removeAnswer(answer.id)}
                         disabled={pending}
-                        className="rounded-lg px-3 py-1.5 text-sm text-zinc-500 hover:text-red-400 disabled:opacity-50"
+                        className="rounded-lg px-3 py-1.5 text-sm text-ink-faint hover:text-red-700 disabled:opacity-50"
                       >
                         Remove
                       </button>
-                      <span className="text-xs text-zinc-600">
+                      <span className="text-xs text-ink-faint">
                         Drafted {formatGeneratedAt(answer.generated_at)}
                       </span>
                     </div>
 
                     <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                      <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">
                         Talking track
                       </p>
-                      <p className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-200">
+                      <p className="mt-1 whitespace-pre-wrap leading-relaxed text-ink">
                         {answer.talking_track}
                       </p>
                     </div>
 
                     {answer.framing && (
                       <div>
-                        <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                        <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">
                           How to frame it
                         </p>
-                        <p className="mt-1 text-zinc-400">{answer.framing}</p>
+                        <p className="mt-1 text-ink-soft">{answer.framing}</p>
                       </div>
                     )}
 
                     {answer.evidence.length > 0 && (
                       <div>
-                        <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                        <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">
                           Pulled from your background
                         </p>
-                        <ul className="mt-1 list-disc space-y-1 pl-4 text-zinc-400">
+                        <ul className="mt-1 list-disc space-y-1 pl-4 text-ink-soft">
                           {answer.evidence.map((item, i) => (
                             <li key={`${i}-${item}`}>{item}</li>
                           ))}
@@ -286,9 +286,9 @@ export function InterviewAnswerCoach({
                     )}
 
                     {answer.watch_outs && (
-                      <div className="rounded-lg bg-amber-400/5 px-3 py-2">
-                        <p className="text-xs font-medium text-amber-400/90">Watch-outs</p>
-                        <p className="mt-1 text-zinc-400">{answer.watch_outs}</p>
+                      <div className="rounded-lg bg-brand/5 px-3 py-2">
+                        <p className="text-xs font-medium text-brand">Watch-outs</p>
+                        <p className="mt-1 text-ink-soft">{answer.watch_outs}</p>
                       </div>
                     )}
 

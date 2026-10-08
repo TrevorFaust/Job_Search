@@ -39,16 +39,16 @@ export default async function ApplicationsPage() {
     <main className="mx-auto max-w-3xl px-6 py-10">
       <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <BoardHomeLink className="text-sm text-zinc-500 hover:text-amber-300">
+          <BoardHomeLink className="text-sm text-ink-faint hover:text-brand">
             ← Job board
           </BoardHomeLink>
-          <h1 className="mt-4 font-[family-name:var(--font-display)] text-3xl font-bold text-zinc-50">
+          <h1 className="mt-4 font-[family-name:var(--font-display)] text-3xl font-bold text-ink">
             Manual jobs
           </h1>
-          <p className="mt-2 text-sm text-zinc-500">
+          <p className="mt-2 text-sm text-ink-faint">
             Jobs you pasted in yourself — not from our scrapers. Tailor a resume for each one.
             Once you apply, they move to the{' '}
-            <Link href="/?view=applied" className="text-amber-400 hover:text-amber-300">
+            <Link href="/?view=applied" className="text-brand hover:text-brand">
               Applied tab
             </Link>
             .
@@ -56,22 +56,22 @@ export default async function ApplicationsPage() {
         </div>
         <Link
           href="/tailor/add"
-          className="rounded-lg bg-amber-400 px-4 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-amber-300"
+          className="rounded-full bg-brand px-4 py-2.5 text-sm font-semibold text-paper shadow-sm transition hover:bg-brand-soft"
         >
           + Add job
         </Link>
       </header>
 
       {jobs.length === 0 ? (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-10 text-center">
-          <p className="text-zinc-400">
+        <div className="rounded-xl border border-line bg-paper p-10 text-center">
+          <p className="text-ink-soft">
             {allJobs.length > 0 ? 'No jobs waiting to apply.' : 'No manual jobs yet.'}
           </p>
-          <p className="mt-2 text-sm text-zinc-500">
+          <p className="mt-2 text-sm text-ink-faint">
             {allJobs.length > 0 ? (
               <>
                 Jobs you&apos;ve marked as applied are on the{' '}
-                <Link href="/?view=applied" className="text-amber-400 hover:text-amber-300">
+                <Link href="/?view=applied" className="text-brand hover:text-brand">
                   Applied tab
                 </Link>
                 .
@@ -82,21 +82,21 @@ export default async function ApplicationsPage() {
           </p>
           <Link
             href="/tailor/add"
-            className="mt-6 inline-block text-sm font-medium text-amber-400 hover:text-amber-300"
+            className="mt-6 inline-block text-sm font-medium text-brand hover:text-brand"
           >
             {allJobs.length > 0 ? 'Add another job →' : 'Add your first job →'}
           </Link>
         </div>
       ) : (
-        <ul className="divide-y divide-zinc-800 rounded-xl border border-zinc-800 bg-zinc-900/50">
+        <ul className="divide-y divide-line rounded-xl border border-line bg-paper">
           {jobs.map((job) => (
-            <li key={job.id} className="p-5 transition hover:bg-zinc-900">
+            <li key={job.id} className="p-5 transition hover:bg-deep/50">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <Link
                       href={`/tailor/manual/${job.id}`}
-                      className="text-lg font-semibold text-zinc-50 hover:text-amber-300"
+                      className="text-lg font-semibold text-ink hover:text-brand"
                     >
                       {job.title}
                     </Link>
@@ -104,22 +104,22 @@ export default async function ApplicationsPage() {
                       <FitLevelBadge fitLevel={job.fit_level} fitScore={job.fit_score} />
                     )}
                   </div>
-                  <p className="mt-1 text-sm text-zinc-400">
+                  <p className="mt-1 text-sm text-ink-soft">
                     {job.company ?? 'Company not set'}
                     {job.location ? ` · ${job.location}` : ''}
                   </p>
-                  <p className="mt-1 text-xs text-zinc-600">
+                  <p className="mt-1 text-xs text-ink-faint">
                     Added {new Date(job.created_at).toLocaleDateString()}
                     {job.salary ? ` · ${job.salary}` : ''}
                   </p>
                 </div>
                 <div className="text-right">
-                  <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-300">
+                  <span className="rounded-full bg-deep px-3 py-1 text-xs text-ink-soft">
                     {statusLabel(job.session_status, job.has_output)}
                   </span>
                   <Link
                     href={`/tailor/manual/${job.id}`}
-                    className="mt-2 block text-xs font-medium text-amber-400 hover:text-amber-300"
+                    className="mt-2 block text-xs font-medium text-brand hover:text-brand"
                   >
                     {job.has_output ? 'View draft →' : 'Continue tailoring →'}
                   </Link>
@@ -127,7 +127,7 @@ export default async function ApplicationsPage() {
                     manualJobId={job.id}
                     redirectTo="/applications"
                     label="Listing unavailable — remove"
-                    className="mt-2 text-xs text-zinc-500 hover:text-zinc-300"
+                    className="mt-2 text-xs text-ink-faint hover:text-ink"
                   />
                 </div>
               </div>
@@ -136,7 +136,7 @@ export default async function ApplicationsPage() {
                   href={job.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-2 inline-block text-xs text-zinc-500 hover:text-zinc-400"
+                  className="mt-2 inline-block text-xs text-ink-faint hover:text-ink-soft"
                 >
                   Original listing ↗
                 </a>

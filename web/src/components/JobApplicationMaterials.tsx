@@ -27,11 +27,11 @@ export function JobApplicationMaterials({ tailorHref, outputText, coverLetterTex
 
   if (!hasResume && !legacyPlainText && !hasCover) {
     return (
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-8 text-center">
-        <p className="text-sm text-zinc-400">No tailored resume or cover letter yet.</p>
+      <div className="rounded-xl border border-line bg-paper p-8 text-center">
+        <p className="text-sm text-ink-soft">No tailored resume or cover letter yet.</p>
         <Link
           href={tailorHref}
-          className="mt-4 inline-block rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-amber-300"
+          className="mt-4 inline-block rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-paper hover:bg-brand-soft"
         >
           Tailor resume for this role
         </Link>
@@ -43,15 +43,15 @@ export function JobApplicationMaterials({ tailorHref, outputText, coverLetterTex
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="flex rounded-lg border border-zinc-700 bg-zinc-950 p-0.5">
+          <div className="flex rounded-lg border border-line bg-sheet p-0.5">
             {(hasResume || legacyPlainText) && (
               <button
                 type="button"
                 onClick={() => setDraftView('resume')}
                 className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
                   draftView === 'resume'
-                    ? 'bg-amber-400 text-zinc-950'
-                    : 'text-zinc-400 hover:text-zinc-200'
+                    ? 'bg-brand text-paper'
+                    : 'text-ink-soft hover:text-ink'
                 }`}
               >
                 Resume
@@ -63,8 +63,8 @@ export function JobApplicationMaterials({ tailorHref, outputText, coverLetterTex
                 onClick={() => setDraftView('cover-letter')}
                 className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
                   draftView === 'cover-letter'
-                    ? 'bg-amber-400 text-zinc-950'
-                    : 'text-zinc-400 hover:text-zinc-200'
+                    ? 'bg-brand text-paper'
+                    : 'text-ink-soft hover:text-ink'
                 }`}
               >
                 Cover letter
@@ -74,7 +74,7 @@ export function JobApplicationMaterials({ tailorHref, outputText, coverLetterTex
         </div>
         <Link
           href={tailorHref}
-          className="rounded-lg border border-zinc-600 px-4 py-2 text-sm text-zinc-300 hover:border-amber-500/50 hover:text-amber-300"
+          className="rounded-lg border border-line px-4 py-2 text-sm text-ink-soft hover:border-brand hover:text-brand"
         >
           Edit resume & cover letter →
         </Link>

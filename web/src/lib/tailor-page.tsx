@@ -48,15 +48,15 @@ export async function prepareTailorSession(opts: {
       kind: 'no_resume',
       element: (
         <main className="mx-auto max-w-lg px-6 py-20 text-center">
-          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-zinc-50">
+          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-ink">
             Upload your resume first
           </h1>
-          <p className="mt-3 text-sm text-zinc-500">
+          <p className="mt-3 text-sm text-ink-faint">
             We need your master resume before tailoring it for a job.
           </p>
           <Link
             href={`/settings/${opts.editToken}#resume`}
-            className="mt-6 inline-block rounded-lg bg-amber-400 px-5 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-amber-300"
+            className="mt-6 inline-block rounded-lg bg-brand px-5 py-2.5 text-sm font-semibold text-paper hover:bg-brand-soft"
           >
             Add resume
           </Link>
@@ -71,16 +71,16 @@ export async function prepareTailorSession(opts: {
       kind: 'no_llm',
       element: (
         <main className="mx-auto max-w-lg px-6 py-20 text-center">
-          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-zinc-50">
+          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-ink">
             Add your own API key
           </h1>
-          <p className="mt-3 text-sm text-zinc-500">
+          <p className="mt-3 text-sm text-ink-faint">
             Tailoring is billed to each user. Save an Anthropic or OpenAI key in Profile so this
             does not run on the site owner&apos;s account.
           </p>
           <Link
             href={`/settings/${opts.editToken}#billing`}
-            className="mt-6 inline-block rounded-lg bg-amber-400 px-5 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-amber-300"
+            className="mt-6 inline-block rounded-lg bg-brand px-5 py-2.5 text-sm font-semibold text-paper hover:bg-brand-soft"
           >
             Add API key
           </Link>
@@ -108,9 +108,9 @@ export async function prepareTailorSession(opts: {
     return {
       kind: 'no_description',
       element: (
-        <main className="mx-auto max-w-lg px-6 py-20 text-center text-zinc-400">
+        <main className="mx-auto max-w-lg px-6 py-20 text-center text-ink-soft">
           This job has no description to tailor against.
-          <Link href="/" className="mt-4 block text-amber-400 hover:underline">
+          <Link href="/" className="mt-4 block text-brand hover:underline">
             Back to board
           </Link>
         </main>

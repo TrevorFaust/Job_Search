@@ -74,12 +74,12 @@ export function fitLevelBadgeClass(level: FitLevel): string {
   const base = 'rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide';
   switch (level) {
     case 'strong':
-      return `${base} bg-emerald-400/15 text-emerald-300`;
+      return `${base} bg-emerald-100 text-emerald-800`;
     case 'moderate':
-      return `${base} bg-amber-400/15 text-amber-300`;
+      return `${base} bg-brand/10 text-brand`;
     case 'stretch':
-      return `${base} bg-orange-400/15 text-orange-300`;
+      return `${base} bg-orange-100 text-orange-800`;
     case 'long_shot':
-      return `${base} bg-rose-400/15 text-rose-300`;
+      return `${base} bg-rose-100 text-rose-800`;
   }
 }

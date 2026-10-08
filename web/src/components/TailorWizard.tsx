@@ -91,13 +91,13 @@ function QuestionField({
   }
 
   return (
-    <div className="space-y-1.5 border-t border-zinc-800 pt-3 first:border-0 first:pt-0">
-      <p className="text-sm font-medium leading-snug text-zinc-200">
-        {total > 1 ? <span className="mr-1.5 text-zinc-500">{index + 1}.</span> : null}
+    <div className="space-y-1.5 border-t border-line pt-3 first:border-0 first:pt-0">
+      <p className="text-sm font-medium leading-snug text-ink">
+        {total > 1 ? <span className="mr-1.5 text-ink-faint">{index + 1}.</span> : null}
         {displayQuestion(question.question)}
       </p>
       {usingNotes ? (
-        <p className="text-xs text-emerald-400/90">
+        <p className="text-xs text-emerald-800">
           Drafted from your project notes. Edit anything that&apos;s off.
         </p>
       ) : null}
@@ -113,11 +113,11 @@ function QuestionField({
             className={`rounded-full border px-2.5 py-0.5 text-xs ${
               chip === 'Project notes'
                 ? usingNotes
-                  ? 'border-amber-500/50 text-amber-200'
-                  : 'border-zinc-700 text-zinc-400 hover:border-amber-500/40 hover:text-amber-200'
+                  ? 'border-brand/50 text-brand'
+                  : 'border-line text-ink-soft hover:border-brand hover:text-brand'
                 : (chip === 'Skip' ? value === 'n/a' : value === chip)
-                  ? 'border-amber-500/50 text-amber-200'
-                  : 'border-zinc-700 text-zinc-400 hover:border-amber-500/40 hover:text-amber-200'
+                  ? 'border-brand/50 text-brand'
+                  : 'border-line text-ink-soft hover:border-brand hover:text-brand'
             }`}
           >
             {chip}
@@ -129,7 +129,7 @@ function QuestionField({
         onChange={(e) => onChange(e.target.value)}
         rows={usingNotes || value.length > 160 ? 5 : 2}
         placeholder="Short answer is enough"
-        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-100"
+        className="w-full rounded-lg border border-line bg-sheet px-3 py-1.5 text-sm text-ink"
       />
     </div>
   );
@@ -149,11 +149,11 @@ function DraftRevisionPanel({
   const [notes, setNotes] = useState('');
 
   return (
-    <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
-      <label className="block text-sm font-medium text-zinc-200" htmlFor={`revise-${docLabel}`}>
+    <div className="space-y-2 rounded-lg border border-line bg-sheet p-4">
+      <label className="block text-sm font-medium text-ink" htmlFor={`revise-${docLabel}`}>
         Anything you want changed?
       </label>
-      <p className="text-xs text-zinc-500">
+      <p className="text-xs text-ink-faint">
         Optional for small edits in the preview above. Use this when you want a broader rerun — tone,
         emphasis, swapping examples, or restructuring sections.
       </p>
@@ -178,7 +178,7 @@ function DraftRevisionPanel({
             ? 'e.g. Lead with the NFL project, cut Process Engineer, make the profile less sales-heavy…'
             : 'e.g. Shorter opening, mention DraftDNA, less formal tone…'
         }
-        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-100"
+        className="w-full rounded-lg border border-line bg-sheet px-3 py-1.5 text-sm text-ink"
         disabled={disabled}
       />
       <button
@@ -190,7 +190,7 @@ function DraftRevisionPanel({
           setNotes('');
         }}
         disabled={disabled || pending || !notes.trim()}
-        className="rounded-lg border border-amber-500/40 px-4 py-2 text-sm font-medium text-amber-300 hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+        className="rounded-lg border border-brand/40 px-4 py-2 text-sm font-medium text-brand hover:bg-brand/10 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {pending ? 'Regenerating…' : `Regenerate ${docLabel} with changes`}
       </button>
@@ -202,7 +202,7 @@ function KeywordPills({ label, terms, tone }: { label: string; terms: string[]; 
   if (!terms.length) return null;
   return (
     <div>
-      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">{label}</p>
+      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-faint">{label}</p>
       <div className="flex flex-wrap gap-1.5">
         {terms.slice(0, 24).map((term) => (
           <span key={term} className={`rounded-full px-2.5 py-0.5 text-xs ${tone}`}>
@@ -210,7 +210,7 @@ function KeywordPills({ label, terms, tone }: { label: string; terms: string[]; 
           </span>
         ))}
         {terms.length > 24 && (
-          <span className="px-2 py-0.5 text-xs text-zinc-500">+{terms.length - 24} more</span>
+          <span className="px-2 py-0.5 text-xs text-ink-faint">+{terms.length - 24} more</span>
         )}
       </div>
     </div>
@@ -511,34 +511,34 @@ export function TailorWizard({
 
   return (
     <div className="space-y-8">
-      <header className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
-        <p className="text-xs uppercase tracking-wide text-amber-400/80">
+      <header className="rounded-xl border border-line bg-paper p-5">
+        <p className="text-xs uppercase tracking-wide text-brand">
           {job.isManual ? 'Manual application' : job.source}
         </p>
-        <h1 className="mt-1 font-[family-name:var(--font-display)] text-2xl font-bold text-zinc-50">
+        <h1 className="mt-1 font-[family-name:var(--font-display)] text-2xl font-bold text-ink">
           {job.title}
         </h1>
-        <p className="mt-1 text-sm text-zinc-400">
+        <p className="mt-1 text-sm text-ink-soft">
           {job.company ?? 'Unknown company'} · {job.location ?? 'Location n/a'}
         </p>
-        <p className="mt-3 text-xs text-zinc-600">
+        <p className="mt-3 text-xs text-ink-faint">
           Draft only — review before submitting. We produce a tailored resume and cover letter using the same answers and context.
         </p>
         {!applicationStage && (
-          <div className="mt-4 border-t border-zinc-800 pt-4">
+          <div className="mt-4 border-t border-line pt-4">
             {job.isManual ? (
               <DismissJobButton
                 manualJobId={job.id}
                 redirectTo="/applications"
                 label="Listing unavailable — remove job"
-                className="text-sm text-zinc-500 hover:text-zinc-300"
+                className="text-sm text-ink-faint hover:text-ink"
               />
             ) : (
               <DismissJobButton
                 jobId={Number(job.id)}
                 redirectTo={backHref}
                 label="Listing unavailable — remove from board"
-                className="text-sm text-zinc-500 hover:text-zinc-300"
+                className="text-sm text-ink-faint hover:text-ink"
               />
             )}
           </div>
@@ -546,21 +546,21 @@ export function TailorWizard({
       </header>
 
       {step === 'keywords' && (
-        <section className="space-y-5 rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
+        <section className="space-y-5 rounded-xl border border-line bg-paper p-5">
           <div>
-            <h2 className="text-lg font-semibold text-zinc-100">Keyword overlap</h2>
-            <p className="mt-1 text-sm text-zinc-500">
+            <h2 className="text-lg font-semibold text-ink">Keyword overlap</h2>
+            <p className="mt-1 text-sm text-ink-faint">
               Instant scan of listing terms vs your resume — before AI analysis.
             </p>
           </div>
-          <KeywordPills label="Already on your resume" terms={kw.matched} tone="bg-emerald-950 text-emerald-300" />
-          <KeywordPills label="Related / partial" terms={kw.partial} tone="bg-amber-950/80 text-amber-200" />
-          <KeywordPills label="Not found yet" terms={kw.missing} tone="bg-zinc-800 text-zinc-400" />
+          <KeywordPills label="Already on your resume" terms={kw.matched} tone="bg-emerald-100 text-emerald-800" />
+          <KeywordPills label="Related / partial" terms={kw.partial} tone="bg-brand/15 text-brand" />
+          <KeywordPills label="Not found yet" terms={kw.missing} tone="bg-deep text-ink-soft" />
           <button
             type="button"
             onClick={handleAnalyze}
             disabled={pending}
-            className="rounded-lg bg-amber-400 px-5 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-amber-300 disabled:opacity-50"
+            className="rounded-lg bg-brand px-5 py-2.5 text-sm font-semibold text-paper hover:bg-brand-soft disabled:opacity-50"
           >
             {pending ? 'Analyzing…' : 'Run AI gap analysis & questions'}
           </button>
@@ -569,25 +569,25 @@ export function TailorWizard({
 
       {step === 'questions' && gap && (
         <>
-          <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
-            <h2 className="text-lg font-semibold text-zinc-100">Gap analysis</h2>
+          <section className="space-y-4 rounded-xl border border-line bg-paper p-5">
+            <h2 className="text-lg font-semibold text-ink">Gap analysis</h2>
             {gap.fit_level && (
-              <p className="text-xs uppercase tracking-wide text-zinc-500">
+              <p className="text-xs uppercase tracking-wide text-ink-faint">
                 Fit:{' '}
-                <span className="text-amber-300">
+                <span className="text-brand">
                   {gap.fit_level.replace('_', ' ')}
                   {gap.fit_score != null ? ` · ${gap.fit_score.toFixed(1)}/10` : ''}
                 </span>
               </p>
             )}
-            <p className="text-sm text-zinc-300">{gap.summary}</p>
+            <p className="text-sm text-ink-soft">{gap.summary}</p>
             {gap.strong_matches?.length > 0 && (
               <div>
-                <p className="text-xs font-medium uppercase text-emerald-500">Strong matches</p>
-                <ul className="mt-2 space-y-2 text-sm text-zinc-400">
+                <p className="text-xs font-medium uppercase text-emerald-800">Strong matches</p>
+                <ul className="mt-2 space-y-2 text-sm text-ink-soft">
                   {gap.strong_matches.map((m) => (
                     <li key={m.skill}>
-                      <span className="text-zinc-200">{m.skill}</span> — {m.resume_evidence}
+                      <span className="text-ink">{m.skill}</span> — {m.resume_evidence}
                     </li>
                   ))}
                 </ul>
@@ -595,11 +595,11 @@ export function TailorWizard({
             )}
             {gap.partial_matches?.length > 0 && (
               <div>
-                <p className="text-xs font-medium uppercase text-amber-400">Reframe opportunities</p>
-                <ul className="mt-2 space-y-2 text-sm text-zinc-400">
+                <p className="text-xs font-medium uppercase text-brand">Reframe opportunities</p>
+                <ul className="mt-2 space-y-2 text-sm text-ink-soft">
                   {gap.partial_matches.map((m) => (
                     <li key={m.skill}>
-                      <span className="text-zinc-200">{m.skill}</span> — {m.reframe_suggestion}
+                      <span className="text-ink">{m.skill}</span> — {m.reframe_suggestion}
                     </li>
                   ))}
                 </ul>
@@ -607,20 +607,20 @@ export function TailorWizard({
             )}
           </section>
 
-          <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
+          <section className="space-y-4 rounded-xl border border-line bg-paper p-5">
             <div>
-              <h2 className="text-lg font-semibold text-zinc-100">Clarifying questions</h2>
-              <p className="mt-1 text-sm text-zinc-500">
+              <h2 className="text-lg font-semibold text-ink">Clarifying questions</h2>
+              <p className="mt-1 text-sm text-ink-faint">
                 Short answers are saved and reused. We only ask what&apos;s new for this role.
               </p>
               {reusedCount > 0 && (
-                <p className="mt-2 text-xs text-emerald-400/90">
+                <p className="mt-2 text-xs text-emerald-800">
                   {reusedCount} answer{reusedCount === 1 ? '' : 's'} reused from previous tailoring sessions.
                 </p>
               )}
             </div>
             {questions.length === 0 ? (
-              <p className="text-sm text-zinc-400">
+              <p className="text-sm text-ink-soft">
                 No new questions for this role — your saved answers cover it. Add optional context below and generate.
               </p>
             ) : (
@@ -636,11 +636,11 @@ export function TailorWizard({
                 />
               ))
             )}
-            <div className="space-y-1.5 border-t border-zinc-800 pt-4">
-              <label className="block text-sm font-medium text-zinc-200" htmlFor="extra-context">
+            <div className="space-y-1.5 border-t border-line pt-4">
+              <label className="block text-sm font-medium text-ink" htmlFor="extra-context">
                 Anything else we should know?
               </label>
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-ink-faint">
                 Optional. Why this role, a pivot story, or anything that doesn&apos;t fit above.
               </p>
               <textarea
@@ -649,23 +649,23 @@ export function TailorWizard({
                 onChange={(e) => setExtraContext(e.target.value)}
                 rows={3}
                 placeholder="e.g. I'm pursuing my PPL, my leadership in X translates to…"
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-100"
+                className="w-full rounded-lg border border-line bg-sheet px-3 py-1.5 text-sm text-ink"
               />
             </div>
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-zinc-200" htmlFor="page-length">
+              <label className="block text-sm font-medium text-ink" htmlFor="page-length">
                 Resume length
               </label>
               <select
                 id="page-length"
                 value={pagePreference}
                 onChange={(e) => setPagePreference(e.target.value as 'one' | 'two')}
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+                className="w-full rounded-lg border border-line bg-sheet px-3 py-2 text-sm text-ink"
               >
                 <option value="one">One page (default)</option>
                 <option value="two">Up to two pages</option>
               </select>
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-ink-faint">
                 The draft targets a full page with only job-relevant experience. If space allows, relevant roles get more detail — unrelated jobs stay out. Accomplishment lines have no bullet characters for pasting into your template.
               </p>
             </div>
@@ -673,7 +673,7 @@ export function TailorWizard({
               type="button"
               onClick={handleGenerate}
               disabled={pending}
-              className="rounded-lg bg-amber-400 px-5 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-amber-300 disabled:opacity-50"
+              className="rounded-lg bg-brand px-5 py-2.5 text-sm font-semibold text-paper hover:bg-brand-soft disabled:opacity-50"
             >
               {pending ? 'Generating drafts + ATS…' : 'Generate resume & cover letter'}
             </button>
@@ -682,25 +682,25 @@ export function TailorWizard({
       )}
 
       {step === 'done' && output && atsAudit && (
-        <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
+        <section className="space-y-4 rounded-xl border border-line bg-paper p-5">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold text-zinc-100">ATS screen audit</h2>
-              <p className="mt-1 text-sm text-zinc-500">
+              <h2 className="text-lg font-semibold text-ink">ATS screen audit</h2>
+              <p className="mt-1 text-sm text-ink-faint">
               Evidence-weighted review. Soft blockers set the honest ceiling — after patches, your
               score should match that ceiling. Path notes are only about breaking above it.
             </p>
             </div>
             <div className="text-right">
-              <p className="text-xs uppercase tracking-wide text-zinc-500">
+              <p className="text-xs uppercase tracking-wide text-ink-faint">
                 {atsAudit.score_before_apply != null || atsAudit.follow_ups_closed
                   ? 'Score after updates'
                   : 'ATS score'}
               </p>
-              <p className="font-[family-name:var(--font-display)] text-3xl font-bold text-amber-300">
+              <p className="font-[family-name:var(--font-display)] text-3xl font-bold text-brand">
                 {atsAudit.score}%
               </p>
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-ink-faint">
                 ceiling {atsAudit.ceiling}%
                 {atsAudit.score_before_apply != null
                   ? ` · was ${atsAudit.score_before_apply}% before your updates`
@@ -713,7 +713,7 @@ export function TailorWizard({
 
           {!atsNeedsInput && (
             <div className="space-y-2">
-              <p className="rounded-lg border border-emerald-800/60 bg-emerald-950/30 px-3 py-2 text-sm text-emerald-200">
+              <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
                 Final ATS screen for this draft. Score and notes below are the summary — review the
                 resume, then download when ready.
               </p>
@@ -740,7 +740,7 @@ export function TailorWizard({
                   });
                 }}
                 disabled={pending}
-                className="text-xs text-zinc-500 underline-offset-2 hover:text-amber-300 hover:underline disabled:opacity-50"
+                className="text-xs text-ink-faint underline-offset-2 hover:text-brand hover:underline disabled:opacity-50"
               >
                 {pending ? 'Refreshing ATS…' : 'Refresh ATS score on this draft'}
               </button>
@@ -748,22 +748,22 @@ export function TailorWizard({
           )}
 
           {atsAudit.evidence_notes ? (
-            <p className="text-sm text-zinc-300">{atsAudit.evidence_notes}</p>
+            <p className="text-sm text-ink-soft">{atsAudit.evidence_notes}</p>
           ) : null}
 
-          <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+          <div className="rounded-lg border border-line bg-sheet p-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">
               Above this ceiling
             </p>
-            <p className="mt-1 text-sm text-zinc-300">{atsAudit.path_to_target}</p>
+            <p className="mt-1 text-sm text-ink-soft">{atsAudit.path_to_target}</p>
           </div>
 
           {atsAudit.ceiling_reasons.length > 0 && (
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+              <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">
                 Why the ceiling is {atsAudit.ceiling}%
               </p>
-              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-zinc-400">
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-ink-soft">
                 {atsAudit.ceiling_reasons.map((reason) => (
                   <li key={reason}>{reason}</li>
                 ))}
@@ -773,28 +773,28 @@ export function TailorWizard({
 
           {atsNeedsInput && atsAudit.soft_blockers.length > 0 && (
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-amber-500/90">
+              <p className="text-xs font-medium uppercase tracking-wide text-brand">
                 Soft blockers
               </p>
-              <p className="mt-1 text-xs text-zinc-500">
+              <p className="mt-1 text-xs text-ink-faint">
                 These cap the ceiling when true. If one is inaccurate, rebut it — we&apos;ll
                 recalculate and patch when justified.
               </p>
-              <ul className="mt-2 space-y-3 text-sm text-zinc-400">
+              <ul className="mt-2 space-y-3 text-sm text-ink-soft">
                 {atsAudit.soft_blockers.map((b) => {
                   const key = blockerKey(b);
                   const stateKey = rebuttalStateKey('blocker', key);
                   return (
-                    <li key={key} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+                    <li key={key} className="rounded-lg border border-line bg-sheet p-3">
                       <p>
-                        <span className="text-zinc-200">{b.requirement}</span> — {b.reason}
+                        <span className="text-ink">{b.requirement}</span> — {b.reason}
                       </p>
                       {b.honest_approach ? (
-                        <span className="mt-1 block text-xs text-zinc-500">
+                        <span className="mt-1 block text-xs text-ink-faint">
                           Approach: {b.honest_approach}
                         </span>
                       ) : null}
-                      <label className="mt-2 block text-xs text-zinc-500" htmlFor={`blocker-${key}`}>
+                      <label className="mt-2 block text-xs text-ink-faint" htmlFor={`blocker-${key}`}>
                         Rebuttal (optional)
                       </label>
                       <textarea
@@ -805,7 +805,7 @@ export function TailorWizard({
                         }
                         rows={2}
                         placeholder='e.g. "I have 5 years of AWS across Kennametal and side projects"'
-                        className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-100"
+                        className="mt-1 w-full rounded-lg border border-line bg-sheet px-3 py-1.5 text-sm text-ink"
                       />
                     </li>
                   );
@@ -816,34 +816,34 @@ export function TailorWizard({
 
           {atsNeedsInput && atsAudit.findings.length > 0 && (
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Findings</p>
-              <p className="mt-1 text-xs text-zinc-500">
+              <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Findings</p>
+              <p className="mt-1 text-xs text-ink-faint">
                 Informational notes are fine to ignore. If a finding is wrong, rebut it briefly.
               </p>
-              <ul className="mt-2 space-y-3 text-sm text-zinc-400">
+              <ul className="mt-2 space-y-3 text-sm text-ink-soft">
                 {atsAudit.findings.map((f) => {
                   const key = findingKey(f);
                   const stateKey = rebuttalStateKey('finding', key);
                   return (
-                    <li key={key} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+                    <li key={key} className="rounded-lg border border-line bg-sheet p-3">
                       <p>
                         <span
                           className={
                             f.severity === 'high'
-                              ? 'text-rose-300'
+                              ? 'text-rose-800'
                               : f.severity === 'low'
-                                ? 'text-zinc-500'
-                                : 'text-amber-200'
+                                ? 'text-ink-faint'
+                                : 'text-brand'
                           }
                         >
                           {f.severity}
                         </span>{' '}
-                        · <span className="text-zinc-200">{f.issue}</span>
+                        · <span className="text-ink">{f.issue}</span>
                       </p>
                       {f.fix ? (
-                        <span className="mt-1 block text-xs text-zinc-500">Fix: {f.fix}</span>
+                        <span className="mt-1 block text-xs text-ink-faint">Fix: {f.fix}</span>
                       ) : null}
-                      <label className="mt-2 block text-xs text-zinc-500" htmlFor={`rebut-${key}`}>
+                      <label className="mt-2 block text-xs text-ink-faint" htmlFor={`rebut-${key}`}>
                         Rebuttal (optional)
                       </label>
                       <textarea
@@ -854,7 +854,7 @@ export function TailorWizard({
                         }
                         rows={2}
                         placeholder='e.g. "Actually I owned the Jenkins pipeline at Kennametal for 2 years"'
-                        className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-100"
+                        className="mt-1 w-full rounded-lg border border-line bg-sheet px-3 py-1.5 text-sm text-ink"
                       />
                     </li>
                   );
@@ -865,10 +865,10 @@ export function TailorWizard({
 
           {atsAudit.auto_patches_applied.length > 0 && (
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-emerald-500/90">
+              <p className="text-xs font-medium uppercase tracking-wide text-emerald-800">
                 Auto-patched without asking
               </p>
-              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-zinc-400">
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-ink-soft">
                 {atsAudit.auto_patches_applied.map((p) => (
                   <li key={p}>{p}</li>
                 ))}
@@ -877,12 +877,12 @@ export function TailorWizard({
           )}
 
           {atsNeedsInput ? (
-            <div className="space-y-3 border-t border-zinc-800 pt-4">
+            <div className="space-y-3 border-t border-line pt-4">
               {atsAudit.questions.length > 0 ? (
                 <>
                   <div>
-                    <h3 className="text-sm font-semibold text-zinc-100">Quick ATS questions</h3>
-                    <p className="mt-1 text-xs text-zinc-500">
+                    <h3 className="text-sm font-semibold text-ink">Quick ATS questions</h3>
+                    <p className="mt-1 text-xs text-ink-faint">
                       Optional. Chip answers or finding/blocker rebuttals above — one Apply pushes
                       the resume as far as honesty allows, then follow-ups close.
                     </p>
@@ -900,7 +900,7 @@ export function TailorWizard({
                   ))}
                 </>
               ) : (
-                <p className="text-sm text-zinc-500">
+                <p className="text-sm text-ink-faint">
                   Optional rebuttals above. Apply once to patch and lock this ATS screen — skipped
                   items are treated as accepted.
                 </p>
@@ -909,7 +909,7 @@ export function TailorWizard({
                 type="button"
                 onClick={handleApplyAts}
                 disabled={pending}
-                className="rounded-lg bg-amber-400 px-5 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-amber-300 disabled:opacity-50"
+                className="rounded-lg bg-brand px-5 py-2.5 text-sm font-semibold text-paper hover:bg-brand-soft disabled:opacity-50"
               >
                 {pending ? 'Applying ATS updates…' : 'Apply ATS improvements'}
               </button>
@@ -919,18 +919,18 @@ export function TailorWizard({
       )}
 
       {step === 'done' && output && (
-        <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
+        <section className="space-y-4 rounded-xl border border-line bg-paper p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <h2 className="text-lg font-semibold text-zinc-100">Your drafts</h2>
-              <div className="flex rounded-lg border border-zinc-700 bg-zinc-950 p-0.5">
+              <h2 className="text-lg font-semibold text-ink">Your drafts</h2>
+              <div className="flex rounded-lg border border-line bg-sheet p-0.5">
                 <button
                   type="button"
                   onClick={() => setDraftView('resume')}
                   className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
                     draftView === 'resume'
-                      ? 'bg-amber-400 text-zinc-950'
-                      : 'text-zinc-400 hover:text-zinc-200'
+                      ? 'bg-brand text-paper'
+                      : 'text-ink-soft hover:text-ink'
                   }`}
                 >
                   Resume
@@ -940,8 +940,8 @@ export function TailorWizard({
                   onClick={() => setDraftView('cover-letter')}
                   className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
                     draftView === 'cover-letter'
-                      ? 'bg-amber-400 text-zinc-950'
-                      : 'text-zinc-400 hover:text-zinc-200'
+                      ? 'bg-brand text-paper'
+                      : 'text-ink-soft hover:text-ink'
                   }`}
                 >
                   Cover letter
@@ -961,7 +961,7 @@ export function TailorWizard({
                         : composeCoverLetter(coverLetterOutput, undefined, identity?.cover)
                     )
                   }
-                  className="rounded-lg border border-zinc-600 px-3 py-1.5 text-sm text-zinc-300 hover:border-amber-500/50"
+                  className="rounded-lg border border-line px-3 py-1.5 text-sm text-ink-soft hover:border-brand"
                 >
                   Copy
                 </button>
@@ -970,7 +970,7 @@ export function TailorWizard({
                     type="button"
                     onClick={handleFitToPage}
                     disabled={pending}
-                    className="rounded-lg border border-zinc-600 px-3 py-1.5 text-sm text-zinc-300 hover:border-amber-500/50 disabled:opacity-50"
+                    className="rounded-lg border border-line px-3 py-1.5 text-sm text-ink-soft hover:border-brand disabled:opacity-50"
                   >
                     Trim to one page
                   </button>
@@ -1017,7 +1017,7 @@ export function TailorWizard({
                       }
                     });
                   }}
-                  className="rounded-lg border border-emerald-700 bg-emerald-950/40 px-3 py-1.5 text-sm font-medium text-emerald-200 hover:bg-emerald-900/50"
+                  className="rounded-lg border border-emerald-700 bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-900 hover:bg-emerald-100"
                 >
                   Download PDF
                 </button>
@@ -1025,7 +1025,7 @@ export function TailorWizard({
             )}
           </div>
           {fitMessage && draftView === 'resume' && (
-            <p className="text-xs text-zinc-400">{fitMessage}</p>
+            <p className="text-xs text-ink-soft">{fitMessage}</p>
           )}
           {draftView === 'resume' && resumeDraft ? (
             <ResumePreview
@@ -1046,13 +1046,13 @@ export function TailorWizard({
               candidateName={identity?.displayName}
             />
           ) : (
-            <p className="rounded-lg border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-500">
+            <p className="rounded-lg border border-line bg-sheet p-4 text-sm text-ink-faint">
               No cover letter yet for this session.
             </p>
           )}
           {draftView === 'resume' && keywordAlignment.length > 0 && (
-            <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
-              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
+            <div className="rounded-lg border border-line bg-sheet p-4">
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-faint">
                 Keyword alignment
               </p>
               <div className="flex flex-wrap gap-1.5">
@@ -1061,10 +1061,10 @@ export function TailorWizard({
                     key={item.term}
                     className={`rounded-full px-2.5 py-0.5 text-xs ${
                       /yes/i.test(item.status)
-                        ? 'bg-emerald-950 text-emerald-300'
+                        ? 'bg-emerald-100 text-emerald-800'
                         : /partial/i.test(item.status)
-                          ? 'bg-amber-950/80 text-amber-200'
-                          : 'bg-zinc-800 text-zinc-400'
+                          ? 'bg-brand/15 text-brand'
+                          : 'bg-deep text-ink-soft'
                     }`}
                   >
                     {item.term} · {item.status}
@@ -1078,7 +1078,7 @@ export function TailorWizard({
               type="button"
               onClick={handleGenerateCoverLetter}
               disabled={pending}
-              className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-amber-300 disabled:opacity-50"
+              className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-paper hover:bg-brand-soft disabled:opacity-50"
             >
               {pending ? 'Generating…' : 'Generate cover letter'}
             </button>
@@ -1092,7 +1092,7 @@ export function TailorWizard({
               onRevise={handleReviseDraft}
             />
           )}
-          <div className="flex flex-wrap items-center gap-3 border-t border-zinc-800 pt-4">
+          <div className="flex flex-wrap items-center gap-3 border-t border-line pt-4">
             {applicationStage ? (
               <>
                 <ApplicationStageSelect
@@ -1102,7 +1102,7 @@ export function TailorWizard({
                 />
                 <Link
                   href="/?view=applied"
-                  className="text-sm text-amber-400 hover:underline"
+                  className="text-sm text-brand hover:underline"
                 >
                   View in Applied tab
                 </Link>
@@ -1112,7 +1112,7 @@ export function TailorWizard({
                 manualJobId={job.id}
                 sessionId={session.id}
                 label="I've applied — move to Applied tab"
-                className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-amber-300"
+                className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-paper hover:bg-brand-soft"
               />
             ) : (
               <>
@@ -1120,14 +1120,14 @@ export function TailorWizard({
                   jobId={Number(job.id)}
                   sessionId={session.id}
                   label="I've applied — move to Applied tab"
-                  className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-amber-300"
+                  className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-paper hover:bg-brand-soft"
                 />
                 {job.url && (
                   <a
                     href={job.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm text-zinc-400 hover:text-amber-300"
+                    className="text-sm text-ink-soft hover:text-brand"
                   >
                     Open listing to apply ↗
                   </a>
@@ -1135,7 +1135,7 @@ export function TailorWizard({
               </>
             )}
           </div>
-          <p className="text-xs text-zinc-600">
+          <p className="text-xs text-ink-faint">
             {draftView === 'resume'
               ? resumeDraft
                 ? 'Edit bullets in the preview. Header and education start filled in. Trim to one page removes extras when the PDF would spill. PDF uses Cambria 11pt.'
@@ -1145,7 +1145,7 @@ export function TailorWizard({
         </section>
       )}
 
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && <p className="text-sm text-red-700">{error}</p>}
     </div>
   );
 }
