@@ -437,7 +437,7 @@ export function JobBoard({
                 )
               </>
             ) : null}
-            . Narrow further in the sidebar, or combine with location and salary filters.
+            . Open Filters to narrow further by location or salary.
           </p>
         )}
 

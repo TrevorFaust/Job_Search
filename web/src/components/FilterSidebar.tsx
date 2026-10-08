@@ -5,7 +5,7 @@ import {
   WORK_TYPE_OPTIONS,
   type JobFilters,
 } from '@/lib/filters';
-import { ALL_CATEGORY_IDS, INTEREST_CATEGORIES } from '@/lib/categories';
+import { ALL_CATEGORY_IDS, getCategoryLabel, INTEREST_CATEGORIES } from '@/lib/categories';
 import { LocationInput } from './LocationInput';
 import { ResetBoardFiltersLink } from './PersistBoardFilters';
 
@@ -21,6 +21,47 @@ type Props = {
 const fieldClass =
   'mt-1.5 w-full rounded-xl border border-line bg-paper px-3 py-2.5 text-sm text-ink shadow-sm transition hover:border-brand/40';
 
+function sameIds(a: string[], b: string[]) {
+  if (a.length !== b.length) return false;
+  const set = new Set(b);
+  return a.every((id) => set.has(id));
+}
+
+function appliedFilterLabels(
+  filters: JobFilters,
+  view: string,
+  preferredCategories?: string[]
+): string[] {
+  const labels: string[] = [];
+  const recency = RECENCY_OPTIONS.find((o) => o.days === filters.recencyDays);
+  if (recency?.id) labels.push(recency.label);
+  if (filters.minSalary) labels.push(`$${filters.minSalary.toLocaleString()}+`);
+  if (filters.locations.length) {
+    const radius = filters.locationRadius ?? 50;
+    labels.push(
+      filters.locations.length === 1
+        ? `${filters.locations[0]} · ${radius} mi`
+        : `${filters.locations.length} locations · ${radius} mi`
+    );
+  }
+  const work = WORK_TYPE_OPTIONS.find((o) => o.id === (filters.workType ?? ''));
+  if (work?.id) labels.push(work.label);
+  if (filters.excludeNoSalary) labels.push('Salary listed');
+  const preferredDefaults =
+    view === 'preferred'
+      ? preferredCategories?.length
+        ? preferredCategories
+        : ALL_CATEGORY_IDS
+      : null;
+  const categories =
+    preferredDefaults && sameIds(filters.categories, preferredDefaults) ? [] : filters.categories;
+  if (categories.length === 1) labels.push(getCategoryLabel(categories[0]));
+  else if (categories.length > 1) labels.push(`${categories.length} interests`);
+  if (filters.priorityOrg) labels.push(filters.priorityOrg);
+  if (filters.priorityPlace) labels.push(filters.priorityPlace);
+  return labels;
+}
+
 export function FilterSidebar({ filters, view, stage, sort, q, preferredCategories }: Props) {
   const recencyValue =
     RECENCY_OPTIONS.find((o) => o.days === filters.recencyDays)?.id ?? '';
@@ -34,25 +75,50 @@ export function FilterSidebar({ filters, view, stage, sort, q, preferredCategori
           : ALL_CATEGORY_IDS
         : [];
 
+  const applied = appliedFilterLabels(filters, view, preferredCategories);
+
   return (
     <aside className="rounded-2xl border border-line border-t-2 border-t-brand bg-sheet p-4 shadow-[0_1px_0_rgb(26_28_24/0.04),0_16px_36px_-24px_rgb(26_28_24/0.45)] sm:p-5">
-      <form action="/" method="get" className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="flex items-center gap-2 text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-brand">
+      <details className="group">
+        <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-4 gap-y-2 [&::-webkit-details-marker]:hidden">
+          <span className="inline-flex items-center gap-2 text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-brand">
             <span className="h-px w-5 bg-brand" aria-hidden />
             Filters
-          </h2>
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              className="rounded-full bg-brand px-4 py-2 text-sm font-semibold text-paper shadow-sm transition hover:bg-brand-soft"
-            >
-              Apply
-            </button>
-            <ResetBoardFiltersLink className="flex items-center rounded-full border border-line px-3.5 py-2 text-sm text-ink-faint transition hover:border-ink/25 hover:text-ink">
-              Reset
-            </ResetBoardFiltersLink>
-          </div>
+            {applied.length > 0 && (
+              <span className="rounded-full bg-brand/10 px-2 py-0.5 text-xs font-semibold normal-case tracking-normal text-ink">
+                {applied.length}
+              </span>
+            )}
+          </span>
+          <span className="min-w-0 flex-1 text-sm font-normal normal-case tracking-normal text-ink-soft group-open:hidden">
+            {applied.length > 0 ? applied.join(' · ') : 'Show filters'}
+          </span>
+          <svg
+            viewBox="0 0 20 20"
+            aria-hidden
+            className="size-4 shrink-0 text-ink-faint transition-transform duration-200 group-open:rotate-180 motion-reduce:transition-none"
+          >
+            <path
+              d="M5 7.5 10 12.5 15 7.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </summary>
+      <form action="/" method="get" className="mt-4 space-y-4">
+        <div className="flex justify-end gap-2">
+          <button
+            type="submit"
+            className="rounded-full bg-brand px-4 py-2 text-sm font-semibold text-paper shadow-sm transition hover:bg-brand-soft"
+          >
+            Apply
+          </button>
+          <ResetBoardFiltersLink className="flex items-center rounded-full border border-line px-3.5 py-2 text-sm text-ink-faint transition hover:border-ink/25 hover:text-ink">
+            Reset
+          </ResetBoardFiltersLink>
         </div>
         <input type="hidden" name="view" value={view} />
         {view === 'applied' && stage && <input type="hidden" name="stage" value={stage} />}
@@ -163,6 +229,7 @@ export function FilterSidebar({ filters, view, stage, sort, q, preferredCategori
           </div>
         </fieldset>
       </form>
+      </details>
     </aside>
   );
 }
