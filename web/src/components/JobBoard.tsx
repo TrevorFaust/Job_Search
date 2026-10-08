@@ -27,7 +27,8 @@ import { usePrioritySeen } from '@/lib/priority-seen';
 import { prioritySourceMeta } from '@/lib/priority-jobs';
 import { isStoredFollowUpContacts } from '@/lib/follow-up-utils';
 import Link from 'next/link';
-import { Fragment, Suspense } from 'react';
+import { Fragment, Suspense, useLayoutEffect, useRef, useState } from 'react';
+import { BoardListSkeleton } from './BoardSkeleton';
 import { PersistBoardFilters } from './PersistBoardFilters';
 import {
   FollowUpContactsExpanded,
@@ -53,6 +54,8 @@ type Props = {
   locations?: string[];
   preferredCategories?: string[];
   settingsToken?: string;
+  listPending?: boolean;
+  onSelectView?: (view: BoardView) => void;
 };
 
 const BOARD_VIEWS: { id: BoardView; label: string; signedInOnly?: boolean }[] = [
@@ -131,6 +134,8 @@ export function JobBoard({
   locations = [],
   preferredCategories = [],
   settingsToken,
+  listPending = false,
+  onSelectView,
 }: Props) {
   const pagePriorityIds = jobs.filter((j) => j.is_special && !j.isManual).map((j) => j.id);
   const { ready: seenReady, newCount, sessionUnseen } = usePrioritySeen(
@@ -176,6 +181,31 @@ export function JobBoard({
     job.isManual && job.manual_job_id
       ? `/tailor/manual/${job.manual_job_id}`
       : `/tailor/${job.id}`;
+
+  const tabTrackRef = useRef<HTMLDivElement>(null);
+  const [tabIndicator, setTabIndicator] = useState({ left: 0, top: 0, width: 0, height: 0 });
+  const visibleViews = BOARD_VIEWS.filter((v) => !v.signedInOnly || signedIn);
+
+  useLayoutEffect(() => {
+    const root = tabTrackRef.current;
+    if (!root) return;
+
+    const measure = () => {
+      const active = root.querySelector<HTMLElement>('[data-tab-active="true"]');
+      if (!active) return;
+      setTabIndicator({
+        left: active.offsetLeft,
+        top: active.offsetTop,
+        width: active.offsetWidth,
+        height: active.offsetHeight,
+      });
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, [view, signedIn, newCount]);
 
   return (
     <>
@@ -229,29 +259,50 @@ export function JobBoard({
           )}
         </form>
 
-        <div className="inline-flex max-w-full flex-wrap gap-1 rounded-full bg-deep/70 p-1">
-          {BOARD_VIEWS.filter((v) => !v.signedInOnly || signedIn).map((v) => {
+        <div
+          ref={tabTrackRef}
+          className="relative inline-flex max-w-full flex-wrap gap-1 rounded-full bg-deep/70 p-1"
+          role="tablist"
+          aria-label="Job lists"
+        >
+          <span
+            aria-hidden
+            className="pointer-events-none absolute left-0 top-0 rounded-full bg-sheet shadow-sm transition-[transform,width,height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+            style={{
+              width: tabIndicator.width,
+              height: tabIndicator.height,
+              transform: `translate3d(${tabIndicator.left}px, ${tabIndicator.top}px, 0)`,
+              opacity: tabIndicator.width ? 1 : 0,
+            }}
+          />
+          {visibleViews.map((v) => {
             const showNew = v.id === 'priority' && seenReady && newCount > 0;
+            const selected = view === v.id;
             return (
               <a
                 key={v.id}
                 href={hrefFor({ view: v.id, stage: '', page: 1 })}
+                role="tab"
+                aria-selected={selected}
+                data-tab-active={selected ? 'true' : undefined}
                 aria-label={
                   v.id === 'priority' && showNew
                     ? `Priority, ${newCount} new ${newCount === 1 ? 'job' : 'jobs'}`
                     : v.label
                 }
-                className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium transition ${
-                  view === v.id
-                    ? 'bg-sheet text-ink shadow-sm'
-                    : 'text-ink-soft hover:bg-sheet/70 hover:text-ink'
+                onClick={(event) => {
+                  if (!onSelectView) return;
+                  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+                  event.preventDefault();
+                  onSelectView(v.id);
+                }}
+                className={`relative z-10 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+                  selected ? 'text-ink' : 'text-ink-soft hover:text-ink'
                 }`}
               >
                 {v.label}
                 {showNew ? (
-                  <span
-                    className="inline-flex min-w-5 items-center justify-center rounded-full bg-brand px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-paper"
-                  >
+                  <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-brand px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-paper">
                     {newCount}
                   </span>
                 ) : null}
@@ -367,7 +418,9 @@ export function JobBoard({
             );
           })}
           <span className="ml-auto">
-            {total} jobs{totalPages > 1 ? ` · showing ${jobs.length} on this page` : ''}
+            {listPending
+              ? 'Loading…'
+              : `${total} jobs${totalPages > 1 ? ` · showing ${jobs.length} on this page` : ''}`}
           </span>
         </div>
 
@@ -424,6 +477,9 @@ export function JobBoard({
           </p>
         )}
 
+        {listPending ? (
+          <BoardListSkeleton />
+        ) : (
         <div className="space-y-3">
           {jobs.length === 0 ? (
             <p className="rounded-2xl border border-line bg-sheet p-8 text-center text-ink-faint shadow-sm">
@@ -630,6 +686,7 @@ export function JobBoard({
             })
           )}
         </div>
+        )}
 
         <Pagination
           page={page}

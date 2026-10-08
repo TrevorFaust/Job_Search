@@ -1,3 +1,17 @@
+export function BoardListSkeleton() {
+  return (
+    <div className="space-y-3" aria-busy="true" aria-label="Loading jobs">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div key={i} className="space-y-3 rounded-2xl border border-line bg-sheet p-5">
+          <div className="h-6 w-2/3 animate-pulse rounded bg-deep" />
+          <div className="h-4 w-1/2 animate-pulse rounded bg-deep/80" />
+          <div className="h-4 w-1/3 animate-pulse rounded bg-deep/60" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function BoardSkeleton() {
   return (
     <div className="grid gap-8 lg:grid-cols-[280px_minmax(0,1fr)]" aria-busy="true" aria-label="Loading jobs">
