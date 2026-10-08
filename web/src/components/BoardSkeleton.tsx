@@ -14,11 +14,11 @@ export function BoardListSkeleton() {
 
 export function BoardSkeleton() {
   return (
-    <div className="grid gap-8 lg:grid-cols-[280px_minmax(0,1fr)]" aria-busy="true" aria-label="Loading jobs">
-      <div className="hidden space-y-4 rounded-2xl border border-line bg-sheet p-5 lg:block">
+    <div className="space-y-6" aria-busy="true" aria-label="Loading jobs">
+      <div className="space-y-3 rounded-2xl border border-line bg-sheet p-5">
         <div className="h-4 w-20 animate-pulse rounded bg-deep" />
-        <div className="space-y-2">
-          {Array.from({ length: 8 }).map((_, i) => (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="h-10 animate-pulse rounded-xl bg-deep/80" />
           ))}
         </div>

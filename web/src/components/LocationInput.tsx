@@ -163,10 +163,10 @@ export function LocationInput({ name, defaultValues = [] }: Props) {
           role="combobox"
           aria-expanded={showDropdown}
           aria-autocomplete="list"
-          className="w-full rounded-lg border border-line bg-sheet px-3 py-2 text-ink"
+          className="w-full rounded-xl border border-line bg-paper px-3 py-2.5 text-sm text-ink shadow-sm transition hover:border-brand/40"
         />
         {showDropdown && (
-          <ul className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-line bg-sheet py-1 shadow-lg">
+          <ul className="absolute z-30 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-line bg-sheet py-1 shadow-lg">
             {loading && (
               <li className="px-3 py-1.5 text-sm text-ink-faint">Searching locations…</li>
             )}

@@ -212,7 +212,7 @@ export function JobBoard({
       <Suspense fallback={null}>
         <PersistBoardFilters />
       </Suspense>
-      <div className="grid gap-8 lg:grid-cols-[280px_minmax(0,1fr)]">
+      <div className="space-y-6">
       <FilterSidebar filters={filters} view={view} stage={stage} sort={sort} q={q} preferredCategories={preferredCategories} />
 
       <div className="space-y-6">
