@@ -8,7 +8,8 @@
   --muted: #5c6358;
   --card: #fffdf8;
   --border: #c9c2b4;
-  --font-slogan: var(--font-display);
+  --font-display: "Fraunces", Georgia, serif;
+  --font-slogan: "Fraunces", Georgia, serif;
 }
 
 @theme inline {
@@ -24,8 +25,8 @@
   --color-brand: #2f5d4a;
   --color-brand-soft: #3d6f5f;
   --font-sans: var(--font-body);
-  --font-display: var(--font-display);
-  --font-slogan: var(--font-display);
+  --font-display: "Fraunces", Georgia, serif;
+  --font-slogan: "Fraunces", Georgia, serif;
 }
 
 *,
