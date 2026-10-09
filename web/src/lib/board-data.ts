@@ -62,7 +62,11 @@ export async function fetchBoardPayload(
   const profile = signedIn ? await getOrCreateUserProfile(subscriber!.id) : null;
   const preferredCategories = profile?.preferred_categories ?? [];
 
-  if (view === 'preferred' && !filters.categories.length) {
+  // Interest areas belong to the Preferred tab. All and Priority ignore them
+  // even if an old link still has cat params.
+  if (view !== 'preferred') {
+    filters.categories = [];
+  } else if (!filters.categories.length) {
     filters.categories = preferredCategories.length ? preferredCategories : signedIn ? [] : ALL_CATEGORY_IDS;
   }
 

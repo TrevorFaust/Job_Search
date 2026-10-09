@@ -47,16 +47,12 @@ function appliedFilterLabels(
   const work = WORK_TYPE_OPTIONS.find((o) => o.id === (filters.workType ?? ''));
   if (work?.id) labels.push(work.label);
   if (filters.excludeNoSalary) labels.push('Salary listed');
-  const preferredDefaults =
-    view === 'preferred'
-      ? preferredCategories?.length
-        ? preferredCategories
-        : ALL_CATEGORY_IDS
-      : null;
-  const categories =
-    preferredDefaults && sameIds(filters.categories, preferredDefaults) ? [] : filters.categories;
-  if (categories.length === 1) labels.push(getCategoryLabel(categories[0]));
-  else if (categories.length > 1) labels.push(`${categories.length} interests`);
+  if (view === 'preferred') {
+    const preferredDefaults = preferredCategories?.length ? preferredCategories : ALL_CATEGORY_IDS;
+    const categories = sameIds(filters.categories, preferredDefaults) ? [] : filters.categories;
+    if (categories.length === 1) labels.push(getCategoryLabel(categories[0]));
+    else if (categories.length > 1) labels.push(`${categories.length} interests`);
+  }
   if (filters.priorityOrg) labels.push(filters.priorityOrg);
   if (filters.priorityPlace) labels.push(filters.priorityPlace);
   return labels;
@@ -203,12 +199,11 @@ export function FilterSidebar({ filters, view, stage, sort, q, preferredCategori
           Exclude jobs without salary
         </label>
 
+        {view === 'preferred' && (
         <fieldset className="space-y-2">
           <legend className="text-sm text-ink-soft">
             Interest areas
-            <span className="ml-2 text-xs text-ink-faint">
-              Used on the Preferred tab. Saved defaults live in Profile.
-            </span>
+            <span className="ml-2 text-xs text-ink-faint">Saved defaults live in Profile.</span>
           </legend>
           <div className="flex flex-wrap gap-2">
             {INTEREST_CATEGORIES.map((cat) => (
@@ -228,6 +223,7 @@ export function FilterSidebar({ filters, view, stage, sort, q, preferredCategori
             ))}
           </div>
         </fieldset>
+        )}
       </form>
       </details>
     </aside>

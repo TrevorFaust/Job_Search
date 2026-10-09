@@ -137,7 +137,8 @@ export function JobBoard({
   listPending = false,
   onSelectView,
 }: Props) {
-  const pagePriorityIds = jobs.filter((j) => j.is_special && !j.isManual).map((j) => j.id);
+  const pagePriorityIds =
+    view === 'priority' ? jobs.filter((job) => !job.isManual).map((job) => job.id) : [];
   const { ready: seenReady, newCount, sessionUnseen } = usePrioritySeen(
     view,
     pagePriorityIds,
@@ -158,8 +159,9 @@ export function JobBoard({
 
     const nextView = pick('view', view);
     const nextStage = pick('stage', stage);
+    const hrefFilters = nextView === 'preferred' ? filters : { ...filters, categories: [] };
 
-    return buildBoardHref(filters, {
+    return buildBoardHref(hrefFilters, {
       view: nextView,
       stage: nextView === 'applied' && nextStage ? nextStage : undefined,
       sort: pick('sort', sort),
@@ -234,9 +236,10 @@ export function JobBoard({
               value={RECENCY_OPTIONS.find((o) => o.days === filters.recencyDays)?.id ?? ''}
             />
           )}
-          {filters.categories.map((cat) => (
-            <input key={cat} type="hidden" name="cat" value={cat} />
-          ))}
+          {view === 'preferred' &&
+            filters.categories.map((cat) => (
+              <input key={cat} type="hidden" name="cat" value={cat} />
+            ))}
           <input
             name="q"
             defaultValue={q}
@@ -443,9 +446,8 @@ export function JobBoard({
 
         {view === 'priority' && (
           <p className="text-sm text-ink-faint">
-            Watched / priority roles only — kept off All jobs. The badge counts jobs you haven&apos;t
-            scrolled onto yet; open each page to mark that page as seen (clicking the tab once won&apos;t
-            clear hundreds of jobs).
+            Watched / priority roles only — kept off All jobs. The badge counts priority jobs you
+            have not opened yet. Opening a page marks every job on that page as seen.
           </p>
         )}
 

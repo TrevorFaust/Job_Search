@@ -48,7 +48,11 @@ export function BoardPageClient() {
   const shellRef = useRef<BoardPayload | null>(null);
 
   useEffect(() => {
-    setSearch(canonicalBoardSearch(urlSearch));
+    const cleaned = canonicalBoardSearch(urlSearch);
+    setSearch(cleaned);
+    if (cleaned !== urlSearch && new URLSearchParams(urlSearch).has('cat')) {
+      rememberBoardUrl(cleaned);
+    }
   }, [urlSearch]);
 
   const { data, isPending, isError, error } = useQuery({
