@@ -61,6 +61,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Retry the digest once
+        # No checkout in this job, so gh needs the repo spelled out.
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: gh workflow run "Daily job digest" --ref "${{ github.ref_name }}" -f recovery=true

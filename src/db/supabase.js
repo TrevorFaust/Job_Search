@@ -198,17 +198,38 @@ export async function saveJobs(jobs) {
 
   const idMap = new Map();
   for (let i = 0; i < rows.length; i += CHUNK) {
-    const chunk = rows.slice(i, i + CHUNK);
-    const { data, error } = await getDb()
-      .from('jobs')
-      .upsert(chunk, { onConflict: 'source,external_id' })
-      .select('id, source, external_id');
-    if (error) throw new Error(`Supabase insert failed: ${error.message}`);
-    for (const row of data ?? []) {
+    for (const row of await upsertJobRows(rows.slice(i, i + CHUNK))) {
       idMap.set(`${row.source}:${row.external_id}`, row.id);
     }
   }
   return idMap;
+}
+
+function isStatementTimeout(error) {
+  return error?.code === '57014' || /statement timeout/i.test(error?.message ?? '');
+}
+
+/**
+ * The GIN index on board_search occasionally stalls a write past the API's 8s
+ * statement timeout (canceled a 100-row upsert on 2026-10-13). Upserts are
+ * idempotent, so a timed-out batch is split and retried instead of failing the run.
+ */
+async function upsertJobRows(rows, attempt = 0) {
+  const { data, error } = await getDb()
+    .from('jobs')
+    .upsert(rows, { onConflict: 'source,external_id' })
+    .select('id, source, external_id');
+  if (!error) return data ?? [];
+  if (!isStatementTimeout(error)) throw new Error(`Supabase insert failed: ${formatDbError(error)}`);
+
+  if (rows.length > 1) {
+    const mid = Math.ceil(rows.length / 2);
+    console.warn(`Upsert of ${rows.length} jobs timed out; retrying as ${mid} + ${rows.length - mid}`);
+    return [...(await upsertJobRows(rows.slice(0, mid))), ...(await upsertJobRows(rows.slice(mid)))];
+  }
+  if (attempt >= 2) throw new Error(`Supabase insert failed: ${formatDbError(error)}`);
+  await new Promise((resolve) => setTimeout(resolve, 5000 * (attempt + 1)));
+  return upsertJobRows(rows, attempt + 1);
 }
 
 export async function expireOldJobs() {
