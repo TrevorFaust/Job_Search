@@ -602,10 +602,6 @@ export async function applyAtsImprovements(
     })
     .filter((r) => r.rebuttal.length > 0);
 
-  if (!visibleAnswers.length && !visibleRebuttals.length) {
-    throw new Error('Answer a question or rebut a finding/blocker before applying');
-  }
-
   if (visibleAnswers.length) {
     await upsertAnswerBank(
       sub.id,

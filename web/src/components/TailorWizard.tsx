@@ -713,11 +713,6 @@ export function TailorWizard({
       .filter((r) => r.rebuttal.length > 0);
     const rebuttals = [...findingRebuttals, ...blockerRebuttals];
 
-    if (payload.every((a) => !a.answer) && rebuttals.length === 0) {
-      setError('Answer a question or rebut a finding/blocker before applying.');
-      return;
-    }
-
     startTransition(async () => {
       try {
         if (resumeDraft) await saveResumeDraft(session.id, resumeDraft);
@@ -1011,8 +1006,8 @@ export function TailorWizard({
                 Soft blockers
               </p>
               <p className="mt-1 text-xs text-ink-faint">
-                These cap the ceiling when true. If one is inaccurate, rebut it — we&apos;ll
-                recalculate and patch when justified.
+                These cap the ceiling. A blank box applies the approach below. Add a note when the
+                blocker is wrong.
               </p>
               <ul className="mt-2 space-y-3 text-sm text-ink-soft">
                 {atsAudit.soft_blockers.map((b) => {
@@ -1052,7 +1047,7 @@ export function TailorWizard({
             <div>
               <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Findings</p>
               <p className="mt-1 text-xs text-ink-faint">
-                Informational notes are fine to ignore. If a finding is wrong, rebut it briefly.
+                A blank box applies the fix. Add a note when the finding is wrong.
               </p>
               <ul className="mt-2 space-y-3 text-sm text-ink-soft">
                 {atsAudit.findings.map((f) => {
@@ -1117,8 +1112,8 @@ export function TailorWizard({
                   <div>
                     <h3 className="text-sm font-semibold text-ink">Quick ATS questions</h3>
                     <p className="mt-1 text-xs text-ink-faint">
-                      Optional. Chip answers or finding/blocker rebuttals above — one Apply pushes
-                      the resume as far as honesty allows, then follow-ups close.
+                      Optional. Leave them blank to apply the fixes above. A chip or a short answer
+                      is for when you want to add a fact.
                     </p>
                   </div>
                   {atsAudit.questions.map((q, i) => (
@@ -1135,8 +1130,7 @@ export function TailorWizard({
                 </>
               ) : (
                 <p className="text-sm text-ink-faint">
-                  Optional rebuttals above. Apply once to patch and lock this ATS screen — skipped
-                  items are treated as accepted.
+                  Leave the boxes blank to apply the recommended fixes, then lock this ATS screen.
                 </p>
               )}
               <button

@@ -691,9 +691,12 @@ CEILING vs SCORE (critical):
 - If something is unreachable honestly, lower the ceiling — do not keep score below an inflated ceiling.
 
 Rules:
-- Start from current_draft. Apply ONLY targeted patches — do not rewrite the whole resume.
+- Start from current_draft. Apply targeted patches. Do not rewrite the whole resume.
 - NEVER invent employers, tools, degrees, certifications, or years of experience.
-- If an answer/rebuttal is No / n/a / Skip / empty, do not add that skill or claim.
+- A blank Apply is still an Apply. The candidate accepts every finding.fix and soft_blocker.honest_approach they did not rebut. Implement those now, using only facts already in the master resume or the current draft.
+- Blank question answers are not a Yes. Do not add a skill just because a question was asked.
+- If an answer/rebuttal is No / n/a / Skip, do not add that skill or claim.
+- Typed answers and rebuttals override the recommendation they reply to.
 - If they rebut a "missing" finding with real experience, weave that into bullets/skills honestly using their words + master resume.
 - If they rebut a soft blocker (e.g. years/degree) with clarifying facts, raise the ceiling when justified, drop or soften that blocker, and surface the clarified experience on the resume when truthful.
 - PUSH TO THE HONEST CEILING IN THIS ONE PASS.
@@ -999,11 +1002,31 @@ export async function applyAtsFeedbackToResume(
       path_to_target: priorAudit.path_to_target,
     }),
     '',
-    'Candidate answers to ATS questions:',
+    'Candidate answers to ATS questions (empty means no new facts):',
     JSON.stringify(answers),
     '',
-    'Candidate rebuttals (kind=finding or blocker — treat as authoritative clarifications):',
+    'Candidate rebuttals (empty means they accept that item):',
     JSON.stringify(rebuttals),
+    '',
+    'Accepted recommendations to implement now (items they left blank):',
+    JSON.stringify({
+      fixes: priorAudit.findings
+        .filter(
+          (f) =>
+            !rebuttals.some(
+              (r) => r.kind === 'finding' && r.target_id === (f.id || f.issue)
+            )
+        )
+        .map((f) => ({ issue: f.issue, fix: f.fix })),
+      approaches: priorAudit.soft_blockers
+        .filter(
+          (b) =>
+            !rebuttals.some(
+              (r) => r.kind === 'blocker' && r.target_id === (b.id || b.requirement)
+            )
+        )
+        .map((b) => ({ requirement: b.requirement, approach: b.honest_approach })),
+    }),
     '',
     'Return JSON with this shape:',
     JSON.stringify({
