@@ -628,26 +628,14 @@ export async function generateTailoredResume(
   );
 
   if (pageLength === 'one') {
-    let layout = measureResumeDraft(draft);
-    if (!layout.fits) {
+    if (!measureResumeDraft(draft).fits) {
       draft = fitResumeToPage(draft).draft;
-      layout = measureResumeDraft(draft);
     }
     if (!options.skipFillPasses) {
-      for (let pass = 0; pass < 3 && layout.fits && layout.slackPt > FILL_IF_SLACK_PT; pass++) {
-        const extraBullets = Math.max(1, Math.min(2, Math.round(layout.slackPt / 26)));
-        const before = countResumeBullets(draft);
-        draft = capSkillGroupsToLines(
-          await expandResumeDraft(draft, resumeText, job, extraBullets)
-        );
-        layout = measureResumeDraft(draft);
-        if (countResumeBullets(draft) <= before && layout.slackPt > FILL_IF_SLACK_PT) {
-          continue;
-        }
-        if (!layout.fits) {
-          draft = fitResumeToPage(draft).draft;
-          break;
-        }
+      for (let pass = 0; pass < 2; pass++) {
+        const result = await fillResumeDraftOnce(draft, resumeText, job);
+        if (!result.filled) break;
+        draft = result.draft;
       }
     }
   }
@@ -1085,6 +1073,30 @@ export async function applyAtsFeedbackToResume(
     }),
     audit,
   };
+}
+
+export function resumeNeedsPageFill(draft: ResumeDraft, pageLength: 'one' | 'two'): boolean {
+  if (pageLength !== 'one') return false;
+  const layout = measureResumeDraft(draft);
+  return layout.fits && layout.slackPt > FILL_IF_SLACK_PT;
+}
+
+/** One densify pass. Returns the original draft when the page is already full or the pass adds no bullets. */
+export async function fillResumeDraftOnce(
+  draft: ResumeDraft,
+  resumeText: string,
+  job: { title: string; company: string | null; description: string }
+): Promise<{ draft: ResumeDraft; filled: boolean }> {
+  const layout = measureResumeDraft(draft);
+  if (!layout.fits || layout.slackPt <= FILL_IF_SLACK_PT) {
+    return { draft, filled: false };
+  }
+  const extraBullets = Math.max(1, Math.min(2, Math.round(layout.slackPt / 26)));
+  const before = countResumeBullets(draft);
+  let next = capSkillGroupsToLines(await expandResumeDraft(draft, resumeText, job, extraBullets));
+  if (!measureResumeDraft(next).fits) next = fitResumeToPage(next).draft;
+  const filled = countResumeBullets(next) > before;
+  return { draft: filled ? next : draft, filled };
 }
 
 async function expandResumeDraft(

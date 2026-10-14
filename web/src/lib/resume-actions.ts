@@ -28,8 +28,10 @@ import {
   analyzeResumeForJob,
   applyAtsFeedbackToResume,
   auditTailoredResumeForAts,
+  fillResumeDraftOnce,
   generateCoverLetter,
   generateTailoredResume,
+  resumeNeedsPageFill,
   type GapAnalysis,
   type TailorAnswer,
 } from './llm';
@@ -313,6 +315,149 @@ export async function generateTailoredDraft(
     return { output_text: auditedOutput, cover_letter_text, ats_audit };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Generation failed';
+    await updateSession(sessionId, sub.id, { status: 'failed', error_message: message });
+    throw err;
+  }
+}
+
+async function loadDraftInputs(sessionId: string) {
+  const sub = await requireSubscriber();
+  const session = await getTailoringSession(sessionId, sub.id);
+  if (!session) throw new Error('Session not found');
+
+  const bank = await getAnswerBank(sub.id);
+  const [resume, job] = await Promise.all([
+    getActiveResume(sub.id),
+    resolveJobForSession(session, sub.id),
+  ]);
+  if (!resume || !job?.description) throw new Error('Missing resume or job');
+
+  const gapAnalysis: GapAnalysis =
+    session.gap_analysis && 'summary' in session.gap_analysis
+      ? (session.gap_analysis as GapAnalysis)
+      : { strong_matches: [], partial_matches: [], gaps: [], summary: '' };
+  const fullAnswers = buildFullAnswerSet(session.questions, session.answers, bank);
+  const formatMeta =
+    (resume.format_meta?.sectionOrder?.length ?? 0) > 0
+      ? resume.format_meta
+      : extractResumeStructure(resume.content_text);
+
+  return { sub, session, bank, resume, job, gapAnalysis, fullAnswers, formatMeta };
+}
+
+/** Resume only, no page-fill and no ATS. The client runs those as later steps so progress can move. */
+export async function writeTailoredResume(
+  sessionId: string,
+  extraContext = '',
+  pagePreference: 'one' | 'two' = 'one'
+) {
+  const { sub, session, bank, resume, job, gapAnalysis, fullAnswers, formatMeta } =
+    await loadDraftInputs(sessionId);
+  if (!session.answers.some((a) => a.answer.trim()) && !bank.length) {
+    throw new Error('Answer the clarifying questions first');
+  }
+
+  const context = extraContext.trim() || session.extra_context || '';
+  await updateSession(sessionId, sub.id, {
+    status: 'generating',
+    error_message: null,
+    extra_context: context,
+    page_preference: pagePreference,
+  });
+
+  try {
+    const output_text = await withUserAi(sub, () =>
+      generateTailoredResume(
+        resume.content_text,
+        { title: job.title, company: job.company, description: job.description },
+        gapAnalysis,
+        fullAnswers,
+        {
+          extraContext: context,
+          pageLength: pagePreference,
+          formatMeta,
+          skipFillPasses: true,
+        }
+      )
+    );
+    const draft = parseResumeOutput(output_text)?.draft ?? null;
+    const needs_page_fill = draft ? resumeNeedsPageFill(draft, pagePreference) : false;
+    await updateSession(sessionId, sub.id, { output_text, status: 'generating' });
+    return { output_text, needs_page_fill };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Resume generation failed';
+    await updateSession(sessionId, sub.id, { status: 'failed', error_message: message });
+    throw err;
+  }
+}
+
+/** Cover letter only. Does not change session status, so it can run beside the resume pass. */
+export async function writeTailoredCoverLetter(sessionId: string, extraContext = '') {
+  const { sub, session, resume, job, gapAnalysis, fullAnswers } = await loadDraftInputs(sessionId);
+  const context = extraContext.trim() || session.extra_context || '';
+  const cover_letter_text = await withUserAi(sub, () =>
+    generateCoverLetter(
+      resume.content_text,
+      { title: job.title, company: job.company, description: job.description },
+      gapAnalysis,
+      fullAnswers,
+      { extraContext: context }
+    )
+  );
+  await updateSession(sessionId, sub.id, { cover_letter_text });
+  return { cover_letter_text };
+}
+
+/** Single page-fill pass. Skips the model when the draft already fills the page. */
+export async function fillTailoredResumePage(sessionId: string) {
+  const { sub, session, resume, job } = await loadDraftInputs(sessionId);
+  const parsed = parseResumeOutput(session.output_text);
+  const draft = parsed?.draft ?? (session.output_text ? plainTextToResumeDraft(session.output_text) : null);
+  if (!draft) throw new Error('No resume draft to fill');
+
+  const pagePreference = session.page_preference ?? 'one';
+  if (!resumeNeedsPageFill(draft, pagePreference)) {
+    return { output_text: session.output_text ?? '', filled: false };
+  }
+
+  const { draft: next, filled } = await withUserAi(sub, () =>
+    fillResumeDraftOnce(draft, resume.content_text, {
+      title: job.title,
+      company: job.company,
+      description: job.description,
+    })
+  );
+  if (!filled) return { output_text: session.output_text ?? '', filled: false };
+
+  const output_text = serializeResumeOutput({
+    version: 1,
+    draft: next,
+    keywordAlignment: parsed?.keywordAlignment ?? [],
+  });
+  await updateSession(sessionId, sub.id, { output_text });
+  return { output_text, filled: true };
+}
+
+/** ATS screen for the draft already saved on the session. */
+export async function auditTailoredResume(sessionId: string) {
+  const { sub, session, resume, job, fullAnswers } = await loadDraftInputs(sessionId);
+  if (!session.output_text) throw new Error('Generate a draft first');
+
+  try {
+    const { output_text, ats_audit } = await withUserAi(sub, () =>
+      runAtsAuditAndPatch({
+        outputText: session.output_text!,
+        resumeText: resume.content_text,
+        job: { title: job.title, company: job.company, description: job.description },
+        fullAnswers,
+        subscriberId: sub.id,
+        priorAudit: isAtsAudit(session.ats_audit) ? session.ats_audit : null,
+      })
+    );
+    await updateSession(sessionId, sub.id, { status: 'done', output_text, ats_audit });
+    return { output_text, ats_audit };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'ATS audit failed';
     await updateSession(sessionId, sub.id, { status: 'failed', error_message: message });
     throw err;
   }

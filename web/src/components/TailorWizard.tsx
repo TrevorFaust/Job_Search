@@ -18,16 +18,19 @@ import type { CandidateFact } from '@/lib/candidate-facts';
 import { matchCandidateFact, withFactDrafts } from '@/lib/candidate-facts';
 import {
   applyAtsImprovements,
+  auditTailoredResume,
   dismissAtsFollowUps,
+  fillTailoredResumePage,
   fitResumeDraft,
   generateCoverLetterDraft,
-  generateTailoredDraft,
   refreshAtsAudit,
   reviseTailoredDraft,
   runGapAnalysis,
   saveCoverLetter,
   saveResumeDraft,
   saveTailorAnswers,
+  writeTailoredCoverLetter,
+  writeTailoredResume,
 } from '@/lib/resume-actions';
 import { composeCoverLetter, normalizeCoverLetterBody, type CoverIdentity } from '@/lib/cover-letter';
 import { draftToPlainText, parseResumeOutput, resolveResumeFromOutput, serializeResumeOutput } from '@/lib/resume-draft';
@@ -53,6 +56,192 @@ type Props = {
 };
 
 const QUICK_CHIPS = ['Yes', 'No', 'Not really', 'Skip'];
+
+type DraftStepId = 'resume' | 'letter' | 'fill' | 'ats';
+type DraftStepState = 'wait' | 'run' | 'done' | 'skip' | 'error';
+
+type DraftStep = {
+  state: DraftStepState;
+  startedAt: number | null;
+};
+
+type DraftRun = {
+  startedAt: number;
+  steps: Record<DraftStepId, DraftStep>;
+};
+
+const DRAFT_STEPS: Array<{
+  id: DraftStepId;
+  label: string;
+  weight: number;
+  expectedMs: number;
+}> = [
+  { id: 'resume', label: 'Writing the resume', weight: 0.48, expectedMs: 70_000 },
+  { id: 'letter', label: 'Writing the cover letter', weight: 0.16, expectedMs: 35_000 },
+  { id: 'fill', label: 'Filling the page', weight: 0.16, expectedMs: 45_000 },
+  { id: 'ats', label: 'ATS screen', weight: 0.2, expectedMs: 50_000 },
+];
+
+function freshDraftRun(): DraftRun {
+  const now = Date.now();
+  return {
+    startedAt: now,
+    steps: {
+      resume: { state: 'run', startedAt: now },
+      letter: { state: 'run', startedAt: now },
+      fill: { state: 'wait', startedAt: null },
+      ats: { state: 'wait', startedAt: null },
+    },
+  };
+}
+
+function withDraftStep(run: DraftRun, id: DraftStepId, state: DraftStepState): DraftRun {
+  return {
+    ...run,
+    steps: {
+      ...run.steps,
+      [id]: {
+        state,
+        startedAt: state === 'run' ? Date.now() : run.steps[id].startedAt,
+      },
+    },
+  };
+}
+
+function draftCreep(startedAt: number, expectedMs: number, now: number) {
+  const t = Math.max(0, now - startedAt) / expectedMs;
+  return Math.min(0.92, 1 - Math.exp(-1.15 * t));
+}
+
+function draftProgressPercent(run: DraftRun, now: number) {
+  let value = 0;
+  for (const step of DRAFT_STEPS) {
+    const current = run.steps[step.id];
+    if (current.state === 'done' || current.state === 'skip' || current.state === 'error') {
+      value += step.weight;
+    } else if (current.state === 'run' && current.startedAt) {
+      value += step.weight * draftCreep(current.startedAt, step.expectedMs, now);
+    }
+  }
+  return Math.min(97, Math.round(value * 100));
+}
+
+function formatElapsed(ms: number) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  if (minutes <= 0) return `${seconds}s`;
+  return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
+}
+
+function activeDraftLabel(run: DraftRun) {
+  const running = DRAFT_STEPS.filter((step) => run.steps[step.id].state === 'run');
+  if (
+    running.length === 2 &&
+    running.every((step) => step.id === 'resume' || step.id === 'letter')
+  ) {
+    return 'Writing the resume and cover letter';
+  }
+  return running[0]?.label ?? 'Finishing up';
+}
+
+function StepMark({ state }: { state: DraftStepState }) {
+  if (state === 'done' || state === 'skip') {
+    return (
+      <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-brand text-paper">
+        <svg viewBox="0 0 12 12" className="h-2.5 w-2.5" aria-hidden="true">
+          <path
+            d="M2.2 6.2 4.7 8.7 9.8 3.4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </span>
+    );
+  }
+  if (state === 'error') {
+    return (
+      <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-red-700 text-[10px] font-bold leading-none text-paper">
+        !
+      </span>
+    );
+  }
+  if (state === 'run') {
+    return (
+      <span className="h-4 w-4 shrink-0 animate-pulse rounded-full border-2 border-brand bg-brand/25 motion-reduce:animate-none" />
+    );
+  }
+  return <span className="h-4 w-4 shrink-0 rounded-full border border-line bg-paper" />;
+}
+
+function DraftProgress({
+  run,
+  pageLength,
+}: {
+  run: DraftRun;
+  pageLength: 'one' | 'two';
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 400);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const pct = draftProgressPercent(run, now);
+  const label = activeDraftLabel(run);
+
+  return (
+    <div className="rounded-lg border border-line bg-sheet px-4 py-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="text-sm font-medium text-ink" aria-live="polite">
+          {label}
+        </p>
+        <p className="font-[family-name:var(--font-display)] text-xl font-semibold tabular-nums text-brand">
+          {pct}%
+        </p>
+      </div>
+      <div
+        className="mt-2 h-1.5 overflow-hidden rounded-full bg-paper"
+        role="progressbar"
+        aria-valuenow={pct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={label}
+      >
+        <div
+          className="h-full rounded-full bg-brand transition-[width] duration-500 ease-out"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <p className="mt-1.5 text-xs tabular-nums text-ink-faint">{formatElapsed(now - run.startedAt)} elapsed</p>
+      <ol className="mt-3 space-y-1.5">
+        {DRAFT_STEPS.map((step) => {
+          const state = run.steps[step.id].state;
+          const text =
+            step.id === 'fill' && state === 'skip'
+              ? pageLength === 'two'
+                ? 'Skipped for a two-page resume'
+                : 'Page already full'
+              : step.label;
+          const tone =
+            state === 'wait' ? 'text-ink-faint' : state === 'error' ? 'text-red-700' : 'text-ink';
+          return (
+            <li key={step.id} className={`flex items-center gap-2 text-sm ${tone}`}>
+              <StepMark state={state} />
+              <span>
+                {text}
+                {state === 'error' ? ' failed' : ''}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
 
 function displayQuestion(text: string): string {
   const cleaned = text.replace(/\s+/g, ' ').trim();
@@ -227,6 +416,7 @@ export function TailorWizard({
 }: Props) {
   const [session, setSession] = useState(initialSession);
   const [pending, startTransition] = useTransition();
+  const [draftRun, setDraftRun] = useState<DraftRun | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reusedCount, setReusedCount] = useState(initialReusedCount);
   const [answers, setAnswers] = useState<Record<string, string>>(() => {
@@ -330,7 +520,11 @@ export function TailorWizard({
     });
   }
 
-  function handleGenerate() {
+  function markDraftStep(id: DraftStepId, state: DraftStepState) {
+    setDraftRun((current) => (current ? withDraftStep(current, id, state) : current));
+  }
+
+  async function handleGenerate() {
     setError(null);
     const payload: TailorAnswer[] = questions.map((q) => ({
       question_id: q.id,
@@ -344,34 +538,73 @@ export function TailorWizard({
       return;
     }
 
-    startTransition(async () => {
-      try {
-        await saveTailorAnswers(session.id, payload, extraContext);
-        const result = await generateTailoredDraft(session.id, extraContext, pagePreference);
-        setOutput(result.output_text);
-        setResumeDraft(resolveResumeFromOutput(result.output_text)?.draft ?? null);
-        setCoverLetterOutput(
-          result.cover_letter_text ? normalizeCoverLetterBody(result.cover_letter_text, coverName) : ''
-        );
-        setFitMessage(null);
-        const audit = isAtsAudit(result.ats_audit) ? result.ats_audit : null;
-        const map: Record<string, string> = {};
-        for (const a of audit?.answers ?? []) map[a.question_id] = a.answer;
-        setAtsAnswers(withFactDrafts(audit?.questions ?? [], map, identity?.facts));
-        setAtsRebuttals({});
-        setSession((s) => ({
-          ...s,
-          status: 'done',
-          output_text: result.output_text,
-          cover_letter_text: result.cover_letter_text,
-          ats_audit: result.ats_audit ?? {},
-          extra_context: extraContext.trim(),
-          page_preference: pagePreference,
-        }));
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Generation failed');
+    setDraftRun(freshDraftRun());
+    try {
+      await saveTailorAnswers(session.id, payload, extraContext);
+
+      let coverFailed = false;
+      const [resumeResult, coverText] = await Promise.all([
+        writeTailoredResume(session.id, extraContext, pagePreference).then((result) => {
+          markDraftStep('resume', 'done');
+          return result;
+        }),
+        writeTailoredCoverLetter(session.id, extraContext).then(
+          (result) => {
+            markDraftStep('letter', 'done');
+            return result.cover_letter_text;
+          },
+          () => {
+            markDraftStep('letter', 'error');
+            coverFailed = true;
+            return '';
+          }
+        ),
+      ]);
+
+      let resumeOutput = resumeResult.output_text;
+      if (resumeResult.needs_page_fill) {
+        markDraftStep('fill', 'run');
+        try {
+          const filled = await fillTailoredResumePage(session.id);
+          resumeOutput = filled.output_text;
+          markDraftStep('fill', filled.filled ? 'done' : 'skip');
+        } catch {
+          markDraftStep('fill', 'error');
+        }
+      } else {
+        markDraftStep('fill', 'skip');
       }
-    });
+
+      markDraftStep('ats', 'run');
+      const audited = await auditTailoredResume(session.id);
+      const outputText = audited.output_text || resumeOutput;
+
+      setOutput(outputText);
+      setResumeDraft(resolveResumeFromOutput(outputText)?.draft ?? null);
+      setCoverLetterOutput(coverText ? normalizeCoverLetterBody(coverText, coverName) : '');
+      setFitMessage(null);
+      const audit = isAtsAudit(audited.ats_audit) ? audited.ats_audit : null;
+      const map: Record<string, string> = {};
+      for (const a of audit?.answers ?? []) map[a.question_id] = a.answer;
+      setAtsAnswers(withFactDrafts(audit?.questions ?? [], map, identity?.facts));
+      setAtsRebuttals({});
+      setSession((s) => ({
+        ...s,
+        status: 'done',
+        output_text: outputText,
+        cover_letter_text: coverText,
+        ats_audit: audited.ats_audit ?? {},
+        extra_context: extraContext.trim(),
+        page_preference: pagePreference,
+      }));
+      if (coverFailed) {
+        setError('Resume and ATS screen are ready. Generate the cover letter from the cover letter tab.');
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Generation failed');
+    } finally {
+      setDraftRun(null);
+    }
   }
 
   function handleGenerateCoverLetter() {
@@ -672,11 +905,12 @@ export function TailorWizard({
             <button
               type="button"
               onClick={handleGenerate}
-              disabled={pending}
+              disabled={pending || !!draftRun}
               className="rounded-lg bg-brand px-5 py-2.5 text-sm font-semibold text-paper hover:bg-brand-soft disabled:opacity-50"
             >
-              {pending ? 'Generating drafts + ATS…' : 'Generate resume & cover letter'}
+              {draftRun ? 'Generating drafts + ATS…' : 'Generate resume & cover letter'}
             </button>
+            {draftRun && <DraftProgress run={draftRun} pageLength={pagePreference} />}
           </section>
         </>
       )}
