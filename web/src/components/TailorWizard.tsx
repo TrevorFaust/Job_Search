@@ -113,10 +113,15 @@ function draftCreep(startedAt: number, expectedMs: number, now: number) {
   return Math.min(0.92, 1 - Math.exp(-1.15 * t));
 }
 
-function draftProgressPercent(run: DraftRun, now: number) {
+function progressPercent(
+  meta: Array<{ id: string; weight: number; expectedMs: number }>,
+  steps: Record<string, { state: DraftStepState; startedAt: number | null }>,
+  now: number
+) {
   let value = 0;
-  for (const step of DRAFT_STEPS) {
-    const current = run.steps[step.id];
+  for (const step of meta) {
+    const current = steps[step.id];
+    if (!current) continue;
     if (current.state === 'done' || current.state === 'skip' || current.state === 'error') {
       value += step.weight;
     } else if (current.state === 'run' && current.startedAt) {
@@ -177,12 +182,57 @@ function StepMark({ state }: { state: DraftStepState }) {
   return <span className="h-4 w-4 shrink-0 rounded-full border border-line bg-paper" />;
 }
 
-function DraftProgress({
-  run,
-  pageLength,
+type ApplyStepId = 'save' | 'apply';
+
+type ApplyRun = {
+  startedAt: number;
+  steps: Record<ApplyStepId, DraftStep>;
+};
+
+const APPLY_STEPS: Array<{
+  id: ApplyStepId;
+  label: string;
+  weight: number;
+  expectedMs: number;
+}> = [
+  { id: 'save', label: 'Saving the current draft', weight: 0.08, expectedMs: 4_000 },
+  { id: 'apply', label: 'Applying the approaches', weight: 0.92, expectedMs: 55_000 },
+];
+
+function freshApplyRun(willSave: boolean): ApplyRun {
+  const now = Date.now();
+  return {
+    startedAt: now,
+    steps: {
+      save: { state: willSave ? 'run' : 'skip', startedAt: willSave ? now : null },
+      apply: { state: willSave ? 'wait' : 'run', startedAt: willSave ? null : now },
+    },
+  };
+}
+
+function withApplyStep(run: ApplyRun, id: ApplyStepId, state: DraftStepState): ApplyRun {
+  return {
+    ...run,
+    steps: {
+      ...run.steps,
+      [id]: {
+        state,
+        startedAt: state === 'run' ? Date.now() : run.steps[id].startedAt,
+      },
+    },
+  };
+}
+
+function PassProgress({
+  startedAt,
+  label,
+  measure,
+  rows,
 }: {
-  run: DraftRun;
-  pageLength: 'one' | 'two';
+  startedAt: number;
+  label: string;
+  measure: (now: number) => number;
+  rows: Array<{ id: string; text: string; state: DraftStepState }>;
 }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -190,8 +240,7 @@ function DraftProgress({
     return () => window.clearInterval(id);
   }, []);
 
-  const pct = draftProgressPercent(run, now);
-  const label = activeDraftLabel(run);
+  const pct = measure(now);
 
   return (
     <div className="rounded-lg border border-line bg-sheet px-4 py-3">
@@ -216,30 +265,73 @@ function DraftProgress({
           style={{ width: `${pct}%` }}
         />
       </div>
-      <p className="mt-1.5 text-xs tabular-nums text-ink-faint">{formatElapsed(now - run.startedAt)} elapsed</p>
+      <p className="mt-1.5 text-xs tabular-nums text-ink-faint">{formatElapsed(now - startedAt)} elapsed</p>
       <ol className="mt-3 space-y-1.5">
-        {DRAFT_STEPS.map((step) => {
-          const state = run.steps[step.id].state;
-          const text =
-            step.id === 'fill' && state === 'skip'
-              ? pageLength === 'two'
-                ? 'Skipped for a two-page resume'
-                : 'Page already full'
-              : step.label;
+        {rows.map((step) => {
           const tone =
-            state === 'wait' ? 'text-ink-faint' : state === 'error' ? 'text-red-700' : 'text-ink';
+            step.state === 'wait'
+              ? 'text-ink-faint'
+              : step.state === 'error'
+                ? 'text-red-700'
+                : 'text-ink';
           return (
             <li key={step.id} className={`flex items-center gap-2 text-sm ${tone}`}>
-              <StepMark state={state} />
+              <StepMark state={step.state} />
               <span>
-                {text}
-                {state === 'error' ? ' failed' : ''}
+                {step.text}
+                {step.state === 'error' ? ' failed' : ''}
               </span>
             </li>
           );
         })}
       </ol>
     </div>
+  );
+}
+
+function DraftProgress({
+  run,
+  pageLength,
+}: {
+  run: DraftRun;
+  pageLength: 'one' | 'two';
+}) {
+  const rows = DRAFT_STEPS.map((step) => {
+    const state = run.steps[step.id].state;
+    const text =
+      step.id === 'fill' && state === 'skip'
+        ? pageLength === 'two'
+          ? 'Skipped for a two-page resume'
+          : 'Page already full'
+        : step.label;
+    return { id: step.id, text, state };
+  });
+
+  return (
+    <PassProgress
+      startedAt={run.startedAt}
+      label={activeDraftLabel(run)}
+      measure={(now) => progressPercent(DRAFT_STEPS, run.steps, now)}
+      rows={rows}
+    />
+  );
+}
+
+function ApplyProgress({ run }: { run: ApplyRun }) {
+  const running = APPLY_STEPS.find((step) => run.steps[step.id].state === 'run');
+  const rows = APPLY_STEPS.map((step) => {
+    const state = run.steps[step.id].state;
+    const text = step.id === 'save' && state === 'skip' ? 'Draft already saved' : step.label;
+    return { id: step.id, text, state };
+  });
+
+  return (
+    <PassProgress
+      startedAt={run.startedAt}
+      label={running?.label ?? 'Finishing the ATS update'}
+      measure={(now) => progressPercent(APPLY_STEPS, run.steps, now)}
+      rows={rows}
+    />
   );
 }
 
@@ -417,6 +509,7 @@ export function TailorWizard({
   const [session, setSession] = useState(initialSession);
   const [pending, startTransition] = useTransition();
   const [draftRun, setDraftRun] = useState<DraftRun | null>(null);
+  const [applyRun, setApplyRun] = useState<ApplyRun | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reusedCount, setReusedCount] = useState(initialReusedCount);
   const [answers, setAnswers] = useState<Record<string, string>>(() => {
@@ -688,7 +781,7 @@ export function TailorWizard({
     });
   }
 
-  function handleApplyAts() {
+  async function handleApplyAts() {
     setError(null);
     const qs = atsAudit?.questions ?? [];
     const payload: TailorAnswer[] = qs.map((q) => ({
@@ -712,26 +805,33 @@ export function TailorWizard({
       }))
       .filter((r) => r.rebuttal.length > 0);
     const rebuttals = [...findingRebuttals, ...blockerRebuttals];
+    const willSave = Boolean(resumeDraft);
 
-    startTransition(async () => {
-      try {
-        if (resumeDraft) await saveResumeDraft(session.id, resumeDraft);
-        const result = await applyAtsImprovements(session.id, payload, rebuttals, resumeDraft);
-        setOutput(result.output_text);
-        setResumeDraft(resolveResumeFromOutput(result.output_text)?.draft ?? null);
-        setFitMessage(null);
-        setAtsAnswers({});
-        setAtsRebuttals({});
-        setSession((s) => ({
-          ...s,
-          status: 'done',
-          output_text: result.output_text,
-          ats_audit: result.ats_audit,
-        }));
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'ATS improvement failed');
+    setApplyRun(freshApplyRun(willSave));
+    try {
+      if (resumeDraft) {
+        await saveResumeDraft(session.id, resumeDraft);
+        setApplyRun((current) =>
+          current ? withApplyStep(withApplyStep(current, 'save', 'done'), 'apply', 'run') : current
+        );
       }
-    });
+      const result = await applyAtsImprovements(session.id, payload, rebuttals, resumeDraft);
+      setOutput(result.output_text);
+      setResumeDraft(resolveResumeFromOutput(result.output_text)?.draft ?? null);
+      setFitMessage(null);
+      setAtsAnswers({});
+      setAtsRebuttals({});
+      setSession((s) => ({
+        ...s,
+        status: 'done',
+        output_text: result.output_text,
+        ats_audit: result.ats_audit,
+      }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'ATS improvement failed');
+    } finally {
+      setApplyRun(null);
+    }
   }
 
   const keywordAlignment = parseResumeOutput(output)?.keywordAlignment ?? [];
@@ -1136,11 +1236,12 @@ export function TailorWizard({
               <button
                 type="button"
                 onClick={handleApplyAts}
-                disabled={pending}
+                disabled={pending || !!applyRun}
                 className="rounded-lg bg-brand px-5 py-2.5 text-sm font-semibold text-paper hover:bg-brand-soft disabled:opacity-50"
               >
-                {pending ? 'Applying ATS updates…' : 'Apply ATS improvements'}
+                {applyRun ? 'Applying ATS updates…' : 'Apply ATS improvements'}
               </button>
+              {applyRun && <ApplyProgress run={applyRun} />}
             </div>
           ) : null}
         </section>
