@@ -669,6 +669,7 @@ CEILING vs SCORE (critical):
 Rules:
 - NEVER invent employers, tools, degrees, certifications, or years of experience.
 - Soft blockers (years of experience, degrees, exact titles the candidate lacks) CAP the ceiling but do NOT invent claims.
+- honest_approach: a concrete way to explain experience already on the resume so this gap reads honestly. Name the role or project to lean on and the phrasing to use. Do not propose a new employer, tool, degree, or year count.
 - Be aggressive about rephrasing EXISTING facts to surface buried keywords and stronger evidence — only from the tailored draft + master resume + Q&A.
 - PUSH TO THE HONEST CEILING IN ONE PASS. In patched_draft, implement every safe improvement (reorder bullets, sharpen outcomes, mirror JD language, surface buried tools). Prefer experience and project bullets for new evidence.
 - PROFILE HARD LIMIT: 2-3 sentences, at most 4-5 wrapped lines (~480 characters). Never expand the profile to absorb ATS keywords — put those in bullets/skills instead. If the current profile is already long, shorten it while patching.
@@ -683,22 +684,24 @@ Rules:
 - Speak TO the candidate with "you"/"your".
 - JSON only. No markdown fences.`;
 
-const ATS_APPLY_SYSTEM = `You apply the candidate's ATS follow-up answers and rebuttals (to findings AND soft blockers) to an existing tailored resume, then re-score it.
+const ATS_APPLY_SYSTEM = `You tailor an existing resume from the ATS audit's approaches, then re-score it.
 
 CEILING vs SCORE (critical):
 - After this pass, score MUST equal ceiling (or differ by at most 1).
 - Push every honest improvement now. Do not leave a gap between score and ceiling.
 - If something is unreachable honestly, lower the ceiling — do not keep score below an inflated ceiling.
 
+PER ITEM (this is the whole task):
+- Each soft blocker has an honest_approach. Each finding has a fix. Those are the default instructions.
+- If the candidate left that item's box blank, USE the approach or fix. Rewrite the relevant bullets so the resume explains their existing experience the way the approach describes. Reference its angle and phrasing.
+- An approach is a way around a gap or a clearer explanation of work already on the resume. Follow it. Do not invent an employer, tool, degree, certification, title, or year count the approach does not already ground in known experience.
+- If the candidate wrote a rebuttal on that specific item, IGNORE the approach or fix for that item only. Use their words for that item. Every other unrebutted item still uses its own approach.
+- A blank question is not a confirmed Yes. Do not add that skill. An answered question is authoritative for that question only.
+- No / n/a / Skip means do not add that claim.
+
 Rules:
 - Start from current_draft. Apply targeted patches. Do not rewrite the whole resume.
 - NEVER invent employers, tools, degrees, certifications, or years of experience.
-- A blank Apply is still an Apply. The candidate accepts every finding.fix and soft_blocker.honest_approach they did not rebut. Implement those now, using only facts already in the master resume or the current draft.
-- Blank question answers are not a Yes. Do not add a skill just because a question was asked.
-- If an answer/rebuttal is No / n/a / Skip, do not add that skill or claim.
-- Typed answers and rebuttals override the recommendation they reply to.
-- If they rebut a "missing" finding with real experience, weave that into bullets/skills honestly using their words + master resume.
-- If they rebut a soft blocker (e.g. years/degree) with clarifying facts, raise the ceiling when justified, drop or soften that blocker, and surface the clarified experience on the resume when truthful.
 - PUSH TO THE HONEST CEILING IN THIS ONE PASS.
 - PROFILE HARD LIMIT: 2-3 sentences, at most 4-5 wrapped lines. Do not grow the profile; put new evidence in experience/project bullets.
 - path_to_target: only what would break ABOVE the new ceiling (new experience they still lack) — not remaining edits to reach the ceiling.
@@ -1002,14 +1005,19 @@ export async function applyAtsFeedbackToResume(
       path_to_target: priorAudit.path_to_target,
     }),
     '',
-    'Candidate answers to ATS questions (empty means no new facts):',
-    JSON.stringify(answers),
-    '',
-    'Candidate rebuttals (empty means they accept that item):',
-    JSON.stringify(rebuttals),
-    '',
-    'Accepted recommendations to implement now (items they left blank):',
+    'USE these approaches and fixes. The candidate left them blank, so write the resume this way:',
     JSON.stringify({
+      approaches: priorAudit.soft_blockers
+        .filter(
+          (b) =>
+            !rebuttals.some(
+              (r) => r.kind === 'blocker' && r.target_id === (b.id || b.requirement)
+            )
+        )
+        .map((b) => ({
+          requirement: b.requirement,
+          approach: b.honest_approach,
+        })),
       fixes: priorAudit.findings
         .filter(
           (f) =>
@@ -1018,15 +1026,19 @@ export async function applyAtsFeedbackToResume(
             )
         )
         .map((f) => ({ issue: f.issue, fix: f.fix })),
-      approaches: priorAudit.soft_blockers
-        .filter(
-          (b) =>
-            !rebuttals.some(
-              (r) => r.kind === 'blocker' && r.target_id === (b.id || b.requirement)
-            )
-        )
-        .map((b) => ({ requirement: b.requirement, approach: b.honest_approach })),
     }),
+    '',
+    'IGNORE the approach on these items only. Use the candidate\'s words instead:',
+    JSON.stringify(
+      rebuttals.map((r) => ({
+        kind: r.kind,
+        target: r.label || r.target_id,
+        rebuttal: r.rebuttal,
+      }))
+    ),
+    '',
+    'Question answers (a blank answer does not confirm the skill):',
+    JSON.stringify(answers),
     '',
     'Return JSON with this shape:',
     JSON.stringify({
@@ -1050,7 +1062,7 @@ export async function applyAtsFeedbackToResume(
 
   const raw = await claudeText(
     ATS_APPLY_SYSTEM,
-    `Apply ATS feedback, push the draft to the honest ceiling (score must equal ceiling), and re-score. Return JSON only.\n\n${user}`,
+    `Rewrite the draft using each blank item's approach or fix. Ignore an approach only where the candidate wrote a rebuttal for that item. Do not invent unconfirmed experience. Push to the honest ceiling (score must equal ceiling) and re-score. Return JSON only.\n\n${user}`,
     10000
   );
   if (!raw) throw new Error('Empty ATS apply response');
