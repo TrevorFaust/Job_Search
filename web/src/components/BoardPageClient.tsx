@@ -65,15 +65,47 @@ export function BoardPageClient() {
   const signedIn = shell?.signedIn ?? false;
 
   useEffect(() => {
+    if (!data) return;
+
     const views = signedIn ? TAB_VIEWS : TAB_VIEWS.filter((view) => view !== 'applied');
-    for (const view of views) {
-      const key = boardTabSearch(search, view);
-      void queryClient.prefetchQuery({
-        queryKey: ['board', key],
-        queryFn: () => fetchBoard(key),
-      });
+    const others = views
+      .map((view) => boardTabSearch(search, view))
+      .filter((key) => key !== search);
+
+    let cancelled = false;
+    let idleId = 0;
+    const cancelIdle =
+      typeof requestIdleCallback === 'function'
+        ? () => cancelIdleCallback(idleId)
+        : () => window.clearTimeout(idleId);
+
+    const prefetchOthers = async () => {
+      for (const key of others) {
+        if (cancelled) return;
+        await queryClient.prefetchQuery({
+          queryKey: ['board', key],
+          queryFn: () => fetchBoard(key),
+        });
+      }
+    };
+
+    // Wait until this tab is on screen, then warm the rest one at a time so
+    // All/Preferred/Priority don't compete with the request the user is waiting on.
+    if (typeof requestIdleCallback === 'function') {
+      idleId = requestIdleCallback(() => {
+        void prefetchOthers();
+      }, { timeout: 2500 });
+    } else {
+      idleId = window.setTimeout(() => {
+        void prefetchOthers();
+      }, 400);
     }
-  }, [search, signedIn, queryClient]);
+
+    return () => {
+      cancelled = true;
+      cancelIdle();
+    };
+  }, [data, search, signedIn, queryClient]);
 
   useEffect(() => {
     if (isError && error instanceof Error && error.message === 'SIGN_IN_REQUIRED') {
