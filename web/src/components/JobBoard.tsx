@@ -27,7 +27,7 @@ import { usePrioritySeen } from '@/lib/priority-seen';
 import { prioritySourceMeta } from '@/lib/priority-jobs';
 import { isStoredFollowUpContacts } from '@/lib/follow-up-utils';
 import Link from 'next/link';
-import { Fragment, Suspense, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, Suspense, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { BoardListSkeleton } from './BoardSkeleton';
 import { PersistBoardFilters } from './PersistBoardFilters';
 import {
@@ -56,6 +56,7 @@ type Props = {
   settingsToken?: string;
   listPending?: boolean;
   onSelectView?: (view: BoardView) => void;
+  onNavigate?: (href: string) => void;
 };
 
 const BOARD_VIEWS: { id: BoardView; label: string; signedInOnly?: boolean }[] = [
@@ -136,7 +137,14 @@ export function JobBoard({
   settingsToken,
   listPending = false,
   onSelectView,
+  onNavigate,
 }: Props) {
+  function handleBoardLink(event: MouseEvent<HTMLAnchorElement>) {
+    if (!onNavigate) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    event.preventDefault();
+    onNavigate(event.currentTarget.getAttribute('href') || '/');
+  }
   const pagePriorityIds =
     view === 'priority' ? jobs.filter((job) => !job.isManual).map((job) => job.id) : [];
   const { ready: seenReady, newCount, sessionUnseen } = usePrioritySeen(
@@ -255,6 +263,7 @@ export function JobBoard({
           {q && (
             <a
               href={hrefFor({ q: '', page: 1 })}
+              onClick={handleBoardLink}
               className="flex items-center rounded-full px-3 text-sm text-ink-faint hover:text-ink"
             >
               Clear
@@ -372,6 +381,7 @@ export function JobBoard({
                   { ...filters, priorityOrg: undefined, priorityPlace: undefined },
                   { view: 'priority', sort, q }
                 )}
+                onClick={handleBoardLink}
                 className="rounded-lg border border-line px-3 py-2 text-sm text-ink-faint hover:text-ink"
               >
                 Clear
@@ -384,6 +394,7 @@ export function JobBoard({
           <div className="flex flex-wrap gap-1.5">
             <a
               href={hrefFor({ stage: '', page: 1 })}
+              onClick={handleBoardLink}
               className={`rounded-full border px-3 py-1 text-xs font-medium ${
                 !stage ? 'border-ink bg-ink text-paper' : 'border-line bg-sheet text-ink-soft hover:text-ink'
               }`}
@@ -394,6 +405,7 @@ export function JobBoard({
               <a
                 key={s}
                 href={hrefFor({ stage: s, page: 1 })}
+                onClick={handleBoardLink}
                 className={`rounded-full border px-3 py-1 text-xs font-medium ${
                   stage === s ? 'border-ink bg-ink text-paper' : 'border-line bg-sheet text-ink-soft hover:text-ink'
                 }`}
@@ -412,6 +424,7 @@ export function JobBoard({
               <a
                 key={s.id}
                 href={hrefFor({ sort: nextSort(sort, s.id), page: 1 })}
+                onClick={handleBoardLink}
                 className={`rounded px-2 py-0.5 ${
                   active ? 'text-brand underline' : 'hover:text-ink'
                 }`}
@@ -695,6 +708,7 @@ export function JobBoard({
           totalPages={totalPages}
           total={total}
           hrefForPage={(p) => hrefFor({ page: p })}
+          onNavigate={onNavigate}
         />
       </div>
     </div>

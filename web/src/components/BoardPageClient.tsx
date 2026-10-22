@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { BoardPayload, BoardView } from '@/lib/board-data';
 import { normalizeBoardView } from '@/lib/board-data';
 import { boardTabSearch, canonicalBoardSearch } from '@/lib/board-search';
@@ -55,22 +55,28 @@ export function BoardPageClient() {
     }
   }, [urlSearch]);
 
-  const { data, isPending, isError, error } = useQuery({
+  const { data, isPending, isError, error, isPlaceholderData } = useQuery({
     queryKey: ['board', search],
     queryFn: () => fetchBoard(search),
+    placeholderData: keepPreviousData,
   });
 
   if (data) shellRef.current = data;
   const shell = data ?? shellRef.current;
   const signedIn = shell?.signedIn ?? false;
 
+  const prefetchKey = boardTabSearch(
+    search,
+    normalizeBoardView(new URLSearchParams(search).get('view') ?? undefined)
+  );
+
   useEffect(() => {
     if (!data) return;
 
     const views = signedIn ? TAB_VIEWS : TAB_VIEWS.filter((view) => view !== 'applied');
     const others = views
-      .map((view) => boardTabSearch(search, view))
-      .filter((key) => key !== search);
+      .map((view) => boardTabSearch(prefetchKey, view))
+      .filter((key) => key !== prefetchKey);
 
     let cancelled = false;
     let idleId = 0;
@@ -105,7 +111,7 @@ export function BoardPageClient() {
       cancelled = true;
       cancelIdle();
     };
-  }, [data, search, signedIn, queryClient]);
+  }, [data, prefetchKey, signedIn, queryClient]);
 
   useEffect(() => {
     if (isError && error instanceof Error && error.message === 'SIGN_IN_REQUIRED') {
@@ -115,6 +121,14 @@ export function BoardPageClient() {
 
   function selectView(view: BoardView) {
     const next = boardTabSearch(search, view);
+    if (next === search) return;
+    setSearch(next);
+    rememberBoardUrl(next);
+  }
+
+  function navigateBoard(href: string) {
+    const qs = href.includes('?') ? href.slice(href.indexOf('?') + 1) : '';
+    const next = canonicalBoardSearch(qs);
     if (next === search) return;
     setSearch(next);
     rememberBoardUrl(next);
@@ -133,34 +147,36 @@ export function BoardPageClient() {
     return <BoardSkeleton />;
   }
 
-  const activeView = normalizeBoardView(new URLSearchParams(search).get('view') ?? undefined);
-  const ready = !!data && !isPending;
+  const boardParams = new URLSearchParams(search);
+  const activeView = normalizeBoardView(boardParams.get('view') ?? undefined);
+  const urlPage = Math.max(1, Number(boardParams.get('page')) || 1);
   const activeStage =
     activeView === 'applied'
-      ? normalizeApplicationStage(new URLSearchParams(search).get('stage') ?? undefined)
+      ? normalizeApplicationStage(boardParams.get('stage') ?? undefined)
       : undefined;
 
   return (
     <div>
       {signedIn ? <DigestRunNotice /> : null}
       <JobBoard
-        jobs={ready ? data.jobs : []}
-        total={ready ? data.total : 0}
-        page={ready ? data.page : 1}
-        totalPages={ready ? data.totalPages : 1}
+        jobs={data?.jobs ?? []}
+        total={data?.total ?? 0}
+        page={isPlaceholderData ? urlPage : (data?.page ?? urlPage)}
+        totalPages={data?.totalPages ?? shell.totalPages}
         view={activeView}
-        stage={ready ? data.stage : activeStage}
-        sort={ready ? data.sort : shell.sort}
-        q={ready ? data.q : shell.q}
-        filters={ready ? data.filters : shell.filters}
+        stage={data?.stage ?? activeStage}
+        sort={data?.sort ?? shell.sort}
+        q={data?.q ?? shell.q}
+        filters={data?.filters ?? shell.filters}
         signedIn={signedIn}
-        priorityJobIds={ready ? data.priorityJobIds : shell.priorityJobIds}
-        organizations={ready ? data.organizations : shell.organizations}
-        locations={ready ? data.locations : shell.locations}
-        preferredCategories={ready ? data.preferredCategories : shell.preferredCategories}
-        settingsToken={ready ? data.settingsToken : shell.settingsToken}
-        listPending={!ready}
+        priorityJobIds={data?.priorityJobIds ?? shell.priorityJobIds}
+        organizations={data?.organizations ?? shell.organizations}
+        locations={data?.locations ?? shell.locations}
+        preferredCategories={data?.preferredCategories ?? shell.preferredCategories}
+        settingsToken={data?.settingsToken ?? shell.settingsToken}
+        listPending={!data || isPending || isPlaceholderData}
         onSelectView={selectView}
+        onNavigate={navigateBoard}
       />
     </div>
   );
