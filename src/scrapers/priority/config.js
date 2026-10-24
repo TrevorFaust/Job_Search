@@ -1,5 +1,5 @@
 /**
- * NFL team and league job boards watched daily for priority listings.
+ * Team and league job boards watched daily for priority listings.
  * Each entry becomes job.source (unique per team/board).
  */
 export const NFL_PRIORITY_WATCHES = [
@@ -320,6 +320,95 @@ export const NFL_PRIORITY_WATCHES = [
     platform: 'teamwork',
     config: {
       listingUrl: 'https://www.teamworkonline.com/football-jobs/footballjobs/nfl-football-jobs',
+    },
+  },
+  {
+    id: 'cubs-fo',
+    label: 'Chicago Cubs',
+    url: 'https://my1060wd.wd5.myworkdayjobs.com/en-US/Chicago_Cubs_FO',
+    platform: 'workday',
+    config: {
+      apiUrl: 'https://my1060wd.wd5.myworkdayjobs.com/wday/cxs/my1060wd/Chicago_Cubs_FO/jobs',
+      siteUrl: 'https://my1060wd.wd5.myworkdayjobs.com/en-US/Chicago_Cubs_FO',
+    },
+  },
+  {
+    id: 'cubs-seasonal',
+    label: 'Chicago Cubs Seasonal',
+    url: 'https://my1060wd.wd5.myworkdayjobs.com/en-US/Chicago_Cubs_Seasonal',
+    platform: 'workday',
+    config: {
+      apiUrl: 'https://my1060wd.wd5.myworkdayjobs.com/wday/cxs/my1060wd/Chicago_Cubs_Seasonal/jobs',
+      siteUrl: 'https://my1060wd.wd5.myworkdayjobs.com/en-US/Chicago_Cubs_Seasonal',
+    },
+  },
+  {
+    id: 'marquee-360',
+    label: 'Marquee 360',
+    url: 'https://my1060wd.wd5.myworkdayjobs.com/en-US/Marquee_360',
+    platform: 'workday',
+    config: {
+      apiUrl: 'https://my1060wd.wd5.myworkdayjobs.com/wday/cxs/my1060wd/Marquee_360/jobs',
+      siteUrl: 'https://my1060wd.wd5.myworkdayjobs.com/en-US/Marquee_360',
+    },
+  },
+  {
+    id: 'marquee-development',
+    label: 'Marquee Development',
+    url: 'https://my1060wd.wd5.myworkdayjobs.com/en-US/Marquee_Development',
+    platform: 'workday',
+    config: {
+      apiUrl: 'https://my1060wd.wd5.myworkdayjobs.com/wday/cxs/my1060wd/Marquee_Development/jobs',
+      siteUrl: 'https://my1060wd.wd5.myworkdayjobs.com/en-US/Marquee_Development',
+    },
+  },
+  {
+    id: 'marquee',
+    label: 'Marquee Sports Network',
+    url: 'https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=ff153427-7699-4a48-bfec-f91b40e88134&ccId=19000101_000001&lang=en_US',
+    platform: 'adp',
+    config: {
+      cid: 'ff153427-7699-4a48-bfec-f91b40e88134',
+      ccId: '19000101_000001',
+      careersUrl:
+        'https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=ff153427-7699-4a48-bfec-f91b40e88134&ccId=19000101_000001&lang=en_US&selectedMenuKey=CareerCenter',
+    },
+  },
+  {
+    id: 'bulls',
+    label: 'Chicago Bulls',
+    url: 'https://www.nba.com/bulls/career-opportunities',
+    platform: 'paylocity',
+    config: {
+      feedId: '35b60d3d-0f5f-416a-af65-795625fbfcc4',
+    },
+  },
+  {
+    id: 'blackhawks',
+    label: 'Chicago Blackhawks',
+    url: 'https://apply.clearcompany.com/wirtzcorp',
+    platform: 'clearcompany',
+    config: {
+      siteId: '7f603834-d6d5-947c-d663-7b6908ba1fed',
+      listingUrl: 'https://apply.clearcompany.com/wirtzcorp',
+    },
+  },
+  {
+    id: 'chicagofire',
+    label: 'Chicago Fire FC',
+    url: 'https://www.teamworkonline.com/soccer-jobs/chicago-fire-fc/chicago-fire',
+    platform: 'teamwork',
+    config: {
+      listingUrl: 'https://www.teamworkonline.com/soccer-jobs/chicago-fire-fc/chicago-fire',
+    },
+  },
+  {
+    id: 'wnba',
+    label: 'WNBA',
+    url: 'https://www.teamworkonline.com/basketball-jobs/wnbateamjobs/wnba-team-jobs',
+    platform: 'teamwork',
+    config: {
+      listingUrl: 'https://www.teamworkonline.com/basketball-jobs/wnbateamjobs/wnba-team-jobs',
     },
   },
 ];

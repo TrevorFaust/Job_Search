@@ -60,9 +60,7 @@ export async function scrapeGreenhouse(watch) {
   });
 }
 
-export async function scrapeWorkday(watch) {
-  const { apiUrl, siteUrl } = watch.config;
-  const body = { appliedFacets: {}, limit: 20, offset: 0, searchText: '' };
+async function postWorkday(apiUrl, label, body) {
   let lastErr;
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await fetch(apiUrl, {
@@ -74,23 +72,44 @@ export async function scrapeWorkday(watch) {
       },
       body: JSON.stringify(body),
     });
-    if (res.ok) {
-      const data = await res.json();
-      return (data.jobPostings ?? []).map((job) => {
-        const reqId = job.bulletFields?.[0] ?? job.externalPath?.split('_').pop() ?? job.externalPath;
-        return toPriorityJob(watch, {
-          externalId: reqId,
-          title: job.title,
-          location: job.locationsText ?? null,
-          url: `${siteUrl}${job.externalPath}`,
-          postedAt: parseRelativePosted(job.postedOn),
-        });
-      });
-    }
-    lastErr = `${watch.label} Workday API ${res.status}`;
+    if (res.ok) return res.json();
+    lastErr = `${label} Workday API ${res.status}`;
     await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
   }
   throw new Error(lastErr);
+}
+
+export async function scrapeWorkday(watch) {
+  const { apiUrl, siteUrl } = watch.config;
+  const postings = [];
+  const limit = 20;
+  let offset = 0;
+  let total = Infinity;
+
+  while (offset < total && offset < 200) {
+    const data = await postWorkday(apiUrl, watch.label, {
+      appliedFacets: {},
+      limit,
+      offset,
+      searchText: '',
+    });
+    const batch = data.jobPostings ?? [];
+    total = Number.isFinite(data.total) ? data.total : offset + batch.length;
+    postings.push(...batch);
+    if (!batch.length) break;
+    offset += batch.length;
+  }
+
+  return postings.map((job) => {
+    const reqId = job.bulletFields?.[0] ?? job.externalPath?.split('_').pop() ?? job.externalPath;
+    return toPriorityJob(watch, {
+      externalId: reqId,
+      title: job.title,
+      location: job.locationsText ?? null,
+      url: `${siteUrl}${job.externalPath}`,
+      postedAt: parseRelativePosted(job.postedOn),
+    });
+  });
 }
 
 export async function scrapeAdp(watch) {
@@ -129,10 +148,113 @@ export async function scrapeAdp(watch) {
     });
 }
 
+function paylocityLocation(loc) {
+  if (!loc) return null;
+  const cityState = [loc.city, loc.state].filter(Boolean).join(', ');
+  return cityState || loc.locationDisplayName || loc.name || null;
+}
+
+export async function scrapePaylocity(watch) {
+  const { feedId } = watch.config;
+  const res = await fetch(
+    `https://recruiting.paylocity.com/recruiting/v2/api/feed/jobs/${feedId}`,
+    { headers: { Accept: 'application/json', 'User-Agent': USER_AGENT } }
+  );
+  if (!res.ok) throw new Error(`${watch.label} Paylocity API ${res.status}`);
+  const data = await res.json();
+  return (data.jobs ?? [])
+    .filter((job) => job?.jobId && job?.title)
+    .map((job) => {
+      const description = stripHtml(job.description ?? '');
+      const salaryText = [job.salaryDescription, description].filter(Boolean).join('\n');
+      return toPriorityJob(watch, {
+        externalId: job.jobId,
+        title: job.title,
+        location: paylocityLocation(job.jobLocation),
+        url: job.displayUrl || job.applyUrl,
+        salary: extractSalaryFromText(salaryText)?.raw ?? null,
+        description,
+        postedAt: job.publishedDate ?? job.createdUtc ?? null,
+      });
+    });
+}
+
+function clearcompanyLocation(job) {
+  const loc = job.locations?.[0];
+  if (loc?.isNationwide) return loc.country ? `Remote (${loc.country})` : 'Remote';
+  if (loc) {
+    const parts = [loc.city, loc.subdivision || loc.state].filter(Boolean);
+    if (parts.length) return parts.join(', ');
+  }
+  return job.location || job.officeName || null;
+}
+
+export async function scrapeClearcompany(watch) {
+  const { siteId, listingUrl, source = 'CJB-0' } = watch.config;
+  const pageSize = 100;
+  const results = [];
+  let pageIndex = 0;
+  let total = Infinity;
+
+  while (results.length < total && pageIndex < 20) {
+    const params = new URLSearchParams({
+      pageIndex: String(pageIndex),
+      pageSize: String(pageSize),
+      source,
+    });
+    const res = await fetch(`https://careers-api.clearcompany.com/v1/${siteId}?${params}`, {
+      headers: { Accept: 'application/json', 'User-Agent': USER_AGENT },
+    });
+    if (!res.ok) throw new Error(`${watch.label} ClearCompany API ${res.status}`);
+    const data = await res.json();
+    const batch = data.results ?? [];
+    total = Number.isFinite(data.totalCount) ? data.totalCount : results.length + batch.length;
+    results.push(...batch);
+    if (!batch.length) break;
+    pageIndex += 1;
+  }
+
+  const jobs = [];
+  for (const job of results) {
+    if (!job?.id || !job?.positionTitle) continue;
+    let description = stripHtml(job.description ?? '');
+    if (!description) {
+      const detailRes = await fetch(
+        `https://careers-api.clearcompany.com/v1/${siteId}/${job.id}?source=${encodeURIComponent(source)}`,
+        { headers: { Accept: 'application/json', 'User-Agent': USER_AGENT } }
+      );
+      if (detailRes.ok) {
+        const detail = await detailRes.json();
+        description = stripHtml(detail.description ?? '');
+      }
+    }
+    const jobUrl = new URL(listingUrl);
+    jobUrl.searchParams.set('jobId', String(job.id).toLowerCase());
+    jobs.push(
+      toPriorityJob(watch, {
+        externalId: job.id,
+        title: job.positionTitle,
+        location: clearcompanyLocation(job),
+        url: jobUrl.toString(),
+        salary: extractSalaryFromText(description)?.raw ?? null,
+        description,
+        postedAt: job.postedDate ?? null,
+      })
+    );
+  }
+  return jobs;
+}
+
 export async function scrapeTeamwork(page, watch) {
   const { listingUrl } = watch.config;
   await page.goto(listingUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
-  await page.waitForTimeout(4000);
+  await page
+    .waitForFunction(
+      () => [...document.querySelectorAll('a')].some((a) => a.textContent?.trim() === 'View'),
+      { timeout: 12000 }
+    )
+    .catch(() => {});
+  await page.waitForTimeout(1500);
 
   const listings = await page.evaluate(() => {
     const results = [];
@@ -306,7 +428,7 @@ export async function scrapeEmploymentPage(page, watch) {
   return listings.map((item) => toPriorityJob(watch, item));
 }
 
-const API_PLATFORMS = new Set(['greenhouse', 'workday', 'adp']);
+const API_PLATFORMS = new Set(['greenhouse', 'workday', 'adp', 'paylocity', 'clearcompany']);
 
 export function isApiPlatform(platform) {
   return API_PLATFORMS.has(platform);
@@ -320,6 +442,10 @@ export async function scrapeWatch(page, watch) {
       return scrapeWorkday(watch);
     case 'adp':
       return scrapeAdp(watch);
+    case 'paylocity':
+      return scrapePaylocity(watch);
+    case 'clearcompany':
+      return scrapeClearcompany(watch);
     case 'teamwork':
       return scrapeTeamwork(page, watch);
     case 'dayforce':
