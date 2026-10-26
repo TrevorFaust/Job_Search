@@ -18,14 +18,13 @@ Toggle sources in `config/config.js`. Each maps to a file in `src/scrapers/`.
 | USAJobs.gov | Official API | Skipped if `USAJOBS_API_KEY` / `USAJOBS_USER_AGENT` are not set |
 | Dice | Playwright | Searches all US states; slow and fragile — disable in config if it breaks |
 | Jobspresso | Playwright | WP Job Manager listings + detail-page enrichment |
-| Authentic Jobs | Playwright | Same stack as Jobspresso |
+| Authentic Jobs | RSS | Official job feed, including descriptions |
 | Idealist | Playwright | Nonprofit/mission-driven roles |
 | Work at a Startup (YC) | Playwright | Main board + role category pages |
 | PowerToFly | Playwright | US job listings via infinite scroll |
 
-**Playwright scrapers** (Dice, Remotive browser leg, Jobspresso, Authentic Jobs,
-Idealist, Work at a Startup, PowerToFly) need Chromium installed locally and in
-CI.
+**Playwright scrapers** (Dice, Remotive browser leg, Jobspresso, Idealist, Work
+at a Startup, PowerToFly) need Chromium installed locally and in CI.
 
 **Not wired up yet** (commented in config): remote.co, Wellfound, Welcome to the
 Jungle.
